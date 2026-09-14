@@ -88,6 +88,7 @@
             <th class="px-3 py-2 font-medium">Email</th>
             <th class="px-3 py-2 font-medium">Pénznem</th>
             <th class="px-3 py-2 font-medium">Jóváhagyva</th>
+            <th class="px-3 py-2 font-medium">Műveletek</th>
           </tr>
         </thead>
         <tbody id="approved-retailers"></tbody>
@@ -109,13 +110,24 @@
   </div>
 </div>
 
+<!-- Retailer részletek modal -->
+<div id="retailer-details-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+  <div class="bg-white rounded-lg p-5 w-full max-w-sm text-sm">
+    <h2 class="font-semibold mb-3">Retailer részletei</h2>
+    <div id="retailer-details-body" class="space-y-1.5 text-gray-700"></div>
+    <div class="flex justify-end mt-4">
+      <button id="retailer-details-close" class="text-sm text-gray-500 px-3 py-1.5">Bezárás</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
     getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
-    getFirestore, collection, onSnapshot, doc, updateDoc, orderBy, query, writeBatch, where
+    getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, orderBy, query, writeBatch, where
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   // ⚠️ Illeszd be ugyanazt a firebaseConfig blokkot, amit az app.andyourstories.com
@@ -446,11 +458,42 @@
           <td class="px-3 py-2 text-gray-500">${r.email}</td>
           <td class="px-3 py-2">${r.currency}</td>
           <td class="px-3 py-2 text-gray-500">${approvedDate}</td>
+          <td class="px-3 py-2">
+            <button class="details-btn text-blue-600 hover:underline text-xs mr-3">Részletek</button>
+            <button class="delete-retailer-btn text-red-600 hover:underline text-xs">Törlés</button>
+          </td>
         `;
+
+        tr.querySelector(".details-btn").addEventListener("click", () => showRetailerDetails(r, approvedDate));
+
+        tr.querySelector(".delete-retailer-btn").addEventListener("click", async () => {
+          if (!confirm(`Biztosan törlöd ${r.companyName} retailer rekordját? (A Firebase Auth fiókja megmarad, újraregisztrálásnál ugyanazt használja majd.)`)) return;
+          await deleteDoc(doc(db, "retailers", docSnap.id));
+        });
+
         tbody.appendChild(tr);
       });
     });
   }
+
+  function showRetailerDetails(r, approvedDate) {
+    const body = document.getElementById("retailer-details-body");
+    body.innerHTML = `
+      <div><span class="text-gray-400">Cégnév:</span> ${r.companyName || "-"}</div>
+      <div><span class="text-gray-400">Adószám:</span> ${r.taxNumber || "-"}</div>
+      <div><span class="text-gray-400">Cím:</span> ${r.address || "-"}</div>
+      <div><span class="text-gray-400">Kapcsolattartó:</span> ${r.contactName || "-"}</div>
+      <div><span class="text-gray-400">Email:</span> ${r.email || "-"}</div>
+      <div><span class="text-gray-400">Telefon:</span> ${r.phone || "-"}</div>
+      <div><span class="text-gray-400">Pénznem:</span> ${r.currency || "-"}</div>
+      <div><span class="text-gray-400">Jóváhagyva:</span> ${approvedDate}</div>
+    `;
+    document.getElementById("retailer-details-modal").classList.remove("hidden");
+  }
+
+  document.getElementById("retailer-details-close").addEventListener("click", () => {
+    document.getElementById("retailer-details-modal").classList.add("hidden");
+  });
 </script>
 
 </body>
