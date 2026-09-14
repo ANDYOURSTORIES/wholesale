@@ -184,12 +184,18 @@
         orderSuccessScreen.classList.add("hidden");
         dashboardScreen.classList.remove("hidden");
         loadCatalog();
-      } else {
+      } else if (retailerDoc.exists()) {
+        // A dokumentum létezik, de nem approved (pl. rejected) — ez valódi jogosultsági ok, kiléptetjük
         await signOut(auth);
       }
+      // Ha a dokumentum nem létezik, nem lépünk ki automatikusan — lehet átmeneti replikációs késés
+      // közvetlenül a jóváhagyás után; a felhasználó egyszerűen újratöltheti az oldalt.
     } catch (err) {
+      // Átmeneti hiba (hálózat, permission-denied villanás) — NE léptessük ki automatikusan,
+      // csak jelezzük, hogy próbálja újratölteni az oldalt.
       console.error("Retailer adat lekérési hiba:", err);
-      await signOut(auth);
+      loginError.textContent = "Átmeneti hiba történt, kérjük tölts újra az oldalt.";
+      loginError.classList.remove("hidden");
     }
   });
 
