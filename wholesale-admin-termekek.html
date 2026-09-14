@@ -32,6 +32,9 @@
     <button id="tab-retailers-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">
       Retailerek <span id="pending-count-badge" class="hidden bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-1"></span>
     </button>
+    <button id="tab-orders-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">
+      Rendelések <span id="pending-orders-badge" class="hidden bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-1"></span>
+    </button>
   </div>
 
   <!-- Termékek nézet -->
@@ -121,6 +124,28 @@
       </table>
     </div>
   </div>
+
+  <!-- Rendelések nézet -->
+  <div id="tab-orders" class="hidden">
+    <h2 class="text-sm font-semibold text-gray-500 mb-2">Új rendelések (jóváhagyásra várnak)</h2>
+    <div id="pending-orders" class="space-y-3 mb-8"></div>
+
+    <h2 class="text-sm font-semibold text-gray-500 mb-2">Korábbi rendelések</h2>
+    <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 text-left text-gray-500">
+            <th class="px-3 py-2 font-medium">Retailer</th>
+            <th class="px-3 py-2 font-medium">Összeg</th>
+            <th class="px-3 py-2 font-medium">Státusz</th>
+            <th class="px-3 py-2 font-medium">Dátum</th>
+            <th class="px-3 py-2 font-medium">Műveletek</th>
+          </tr>
+        </thead>
+        <tbody id="history-orders"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Árkategória szerkesztő modal -->
@@ -155,6 +180,17 @@
     <div class="flex justify-end gap-2">
       <button id="retailer-details-close" class="text-sm text-gray-500 px-3 py-1.5">Bezárás</button>
       <button id="retailer-details-save" class="text-sm bg-gray-900 text-white rounded px-3 py-1.5">Mentés</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rendelés részletek modal -->
+<div id="order-details-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+  <div class="bg-white rounded-lg p-5 w-full max-w-md text-sm">
+    <h2 class="font-semibold mb-3">Rendelés részletei</h2>
+    <div id="order-details-body" class="space-y-2 mb-4"></div>
+    <div class="flex justify-end">
+      <button id="order-details-close" class="text-sm text-gray-500 px-3 py-1.5">Bezárás</button>
     </div>
   </div>
 </div>
@@ -217,6 +253,7 @@
       listenToProducts();
       listenToCategories();
       listenToRetailers();
+      listenToOrders();
     } else {
       if (user) signOut(auth);
       loginScreen.classList.remove("hidden");
@@ -229,11 +266,13 @@
     products: document.getElementById("tab-products-btn"),
     categories: document.getElementById("tab-categories-btn"),
     retailers: document.getElementById("tab-retailers-btn"),
+    orders: document.getElementById("tab-orders-btn"),
   };
   const tabPanels = {
     products: document.getElementById("tab-products"),
     categories: document.getElementById("tab-categories"),
     retailers: document.getElementById("tab-retailers"),
+    orders: document.getElementById("tab-orders"),
   };
 
   function activateTab(tab) {
@@ -248,6 +287,7 @@
   tabButtons.products.addEventListener("click", () => activateTab("products"));
   tabButtons.categories.addEventListener("click", () => activateTab("categories"));
   tabButtons.retailers.addEventListener("click", () => activateTab("retailers"));
+  tabButtons.orders.addEventListener("click", () => activateTab("orders"));
 
   // --- Állapot ---
   let currentProducts = []; // [{sku, data}]
@@ -802,6 +842,131 @@
 
   document.getElementById("retailer-details-close").addEventListener("click", () => {
     document.getElementById("retailer-details-modal").classList.add("hidden");
+  });
+
+  // ============== RENDELÉSEK ==============
+
+  function formatOrderDate(createdAt) {
+    if (!createdAt) return "-";
+    const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+    return d.toLocaleDateString("hu-HU") + " " + d.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function orderItemsHtml(items) {
+    return (items || []).map(i =>
+      `<div class="flex justify-between text-xs text-gray-600">
+        <span>${i.title || i.sku} <span class="text-gray-400">(${i.sku})</span> × ${i.qty}</span>
+        <span>${i.lineTotal?.toLocaleString("hu-HU")}</span>
+      </div>`
+    ).join("");
+  }
+
+  const STATUS_LABELS = {
+    submitted: "Jóváhagyásra vár",
+    approved: "Jóváhagyva",
+    paid: "Fizetve",
+    rejected: "Elutasítva",
+  };
+
+  function listenToOrders() {
+    const pendingQ = query(collection(db, "orders"), where("status", "==", "submitted"));
+    onSnapshot(pendingQ, (snapshot) => {
+      const container = document.getElementById("pending-orders");
+      const badge = document.getElementById("pending-orders-badge");
+      container.innerHTML = "";
+
+      if (snapshot.empty) {
+        container.innerHTML = `<p class="text-sm text-gray-400">Nincs jóváhagyásra váró rendelés.</p>`;
+      }
+      badge.textContent = snapshot.size || "";
+      badge.classList.toggle("hidden", snapshot.empty);
+
+      const docs = snapshot.docs.sort((a, b) => (b.data().createdAt?.seconds || 0) - (a.data().createdAt?.seconds || 0));
+
+      docs.forEach((docSnap) => {
+        const o = docSnap.data();
+        const card = document.createElement("div");
+        card.className = "bg-white border border-gray-200 rounded-lg p-4";
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-4 mb-2">
+            <div class="text-sm">
+              <div class="font-medium">${o.retailerCompany || "-"}</div>
+              <div class="text-gray-400 text-xs">${formatOrderDate(o.createdAt)}</div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="font-semibold text-sm">${o.total?.toLocaleString("hu-HU")} ${o.currency}</div>
+              <div class="flex gap-2 mt-2">
+                <button class="order-approve-btn bg-gray-900 text-white rounded px-3 py-1.5 text-xs">Jóváhagy</button>
+                <button class="order-reject-btn text-red-600 text-xs px-2">Elutasít</button>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 pt-2 space-y-1">${orderItemsHtml(o.items)}</div>
+        `;
+
+        card.querySelector(".order-approve-btn").addEventListener("click", async () => {
+          // Megjegyzés: itt kapcsolódik majd be a Billingo díjbekérő automatikus kiküldése (később)
+          await updateDoc(doc(db, "orders", docSnap.id), { status: "approved", approvedAt: new Date().toISOString() });
+        });
+
+        card.querySelector(".order-reject-btn").addEventListener("click", async () => {
+          if (!confirm("Biztosan elutasítod ezt a rendelést?")) return;
+          await updateDoc(doc(db, "orders", docSnap.id), { status: "rejected" });
+        });
+
+        container.appendChild(card);
+      });
+    });
+
+    const historyQ = query(collection(db, "orders"), where("status", "in", ["approved", "paid", "rejected"]));
+    onSnapshot(historyQ, (snapshot) => {
+      const tbody = document.getElementById("history-orders");
+      tbody.innerHTML = "";
+
+      const docs = snapshot.docs.sort((a, b) => (b.data().createdAt?.seconds || 0) - (a.data().createdAt?.seconds || 0));
+
+      docs.forEach((docSnap) => {
+        const o = docSnap.data();
+        const tr = document.createElement("tr");
+        tr.className = "border-b border-gray-100";
+
+        const statusColor = o.status === "paid" ? "text-green-600" : o.status === "rejected" ? "text-red-500" : "text-amber-600";
+
+        tr.innerHTML = `
+          <td class="px-3 py-2">${o.retailerCompany || "-"}</td>
+          <td class="px-3 py-2">${o.total?.toLocaleString("hu-HU")} ${o.currency}</td>
+          <td class="px-3 py-2 ${statusColor}">${STATUS_LABELS[o.status] || o.status}</td>
+          <td class="px-3 py-2 text-gray-500">${formatOrderDate(o.createdAt)}</td>
+          <td class="px-3 py-2">
+            <button class="order-details-btn text-blue-600 hover:underline text-xs mr-3">Részletek</button>
+            ${o.status === "approved" ? `<button class="order-paid-btn text-green-600 hover:underline text-xs">Fizetve</button>` : ""}
+          </td>
+        `;
+
+        tr.querySelector(".order-details-btn").addEventListener("click", () => {
+          document.getElementById("order-details-body").innerHTML = `
+            <div class="text-xs text-gray-500 mb-2">${o.retailerCompany} · ${formatOrderDate(o.createdAt)} · ${STATUS_LABELS[o.status] || o.status}</div>
+            ${orderItemsHtml(o.items)}
+            <div class="flex justify-between font-semibold text-sm border-t border-gray-100 pt-2 mt-2">
+              <span>Összesen</span><span>${o.total?.toLocaleString("hu-HU")} ${o.currency}</span>
+            </div>
+          `;
+          document.getElementById("order-details-modal").classList.remove("hidden");
+        });
+
+        if (o.status === "approved") {
+          tr.querySelector(".order-paid-btn").addEventListener("click", async () => {
+            await updateDoc(doc(db, "orders", docSnap.id), { status: "paid", paidAt: new Date().toISOString() });
+          });
+        }
+
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  document.getElementById("order-details-close").addEventListener("click", () => {
+    document.getElementById("order-details-modal").classList.add("hidden");
   });
 </script>
 
