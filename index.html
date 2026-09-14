@@ -258,7 +258,9 @@
         : `<span class="text-gray-400">Ár egyeztetés alatt</span>`;
 
       row.innerHTML = `
-        <div class="text-sm min-w-0">
+        <img src="${product.imageUrl || ''}" onerror="this.style.visibility='hidden'"
+             class="w-14 h-14 rounded object-cover bg-gray-100 shrink-0 ${product.imageUrl ? '' : 'invisible'}">
+        <div class="text-sm min-w-0 flex-1">
           <div class="font-medium truncate">${product.title || product.sku}</div>
           <div class="text-gray-400 text-xs">SKU: ${product.sku} · Minimum: ${moq} db</div>
           <div class="text-xs mt-0.5">${priceLine}</div>
