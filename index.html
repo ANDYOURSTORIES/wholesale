@@ -58,12 +58,40 @@
   </div>
 </div>
 
-<!-- Bejelentkezve (ideiglenes nézet, amíg a rendelési felület el nem készül) -->
-<div id="dashboard-screen" class="hidden flex items-center justify-center min-h-screen px-4">
+<!-- Bejelentkezve: termékkatalógus + kosár -->
+<div id="dashboard-screen" class="hidden max-w-3xl mx-auto px-4 py-6 pb-28">
+  <div class="flex items-center justify-between mb-1">
+    <h1 class="text-lg font-semibold">Üdv, <span id="dashboard-company"></span>!</h1>
+    <button id="dashboard-logout-btn" class="text-sm text-gray-500">Kilépés</button>
+  </div>
+  <p class="text-xs text-gray-400 mb-4">Az árak a te egyedi kondícióidat tükrözik, mennyiségtől függően.</p>
+
+  <input id="catalog-search" type="text" placeholder="Keresés termék vagy SKU alapján..."
+         class="w-full border rounded px-3 py-2 text-sm mb-4">
+
+  <div id="catalog-list" class="space-y-2"></div>
+
+  <p id="min-order-note" class="text-xs text-gray-400 mt-4"></p>
+</div>
+
+<!-- Kosár összesítő, alul rögzítve -->
+<div id="cart-bar" class="hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3">
+  <div class="max-w-3xl mx-auto flex items-center justify-between">
+    <div class="text-sm">
+      <span class="text-gray-400">Összesen:</span>
+      <span id="cart-total" class="font-semibold"></span>
+    </div>
+    <button id="submit-order-btn" class="bg-gray-900 text-white rounded px-4 py-2 text-sm font-medium">Rendelés leadása</button>
+  </div>
+  <p id="cart-error" class="max-w-3xl mx-auto text-red-600 text-xs mt-1 hidden"></p>
+</div>
+
+<!-- Rendelés visszaigazolás -->
+<div id="order-success-screen" class="hidden flex items-center justify-center min-h-screen px-4">
   <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-md text-center">
-    <h1 class="text-lg font-semibold mb-2">Üdv, <span id="dashboard-company"></span>!</h1>
-    <p class="text-sm text-gray-600 mb-5">Sikeresen bejelentkeztél. A termékkatalógus és a rendelési felület hamarosan elérhető lesz itt.</p>
-    <button id="dashboard-logout-btn" class="text-sm text-gray-500 underline">Kilépés</button>
+    <h1 class="text-lg font-semibold mb-2">Köszönjük a rendelést!</h1>
+    <p class="text-sm text-gray-600 mb-5">Megkaptuk a rendelésedet, hamarosan jóváhagyjuk és kiküldjük a díjbekérőt.</p>
+    <button id="order-success-back-btn" class="text-sm text-gray-500 underline">Vissza a katalógushoz</button>
   </div>
 </div>
 
@@ -73,7 +101,7 @@
     getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
-    getFirestore, collection, addDoc, doc, getDoc, serverTimestamp
+    getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -136,29 +164,193 @@
   document.getElementById("dashboard-logout-btn").addEventListener("click", () => signOut(auth));
 
   // --- Bejelentkezési állapot figyelése ---
+  let currentRetailer = null; // { uid, data }
+
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       dashboardScreen.classList.add("hidden");
+      cartBar.classList.add("hidden");
       entryScreen.classList.remove("hidden");
       return;
     }
 
-    // Van bejelentkezett user — nézzük meg, van-e hozzá jóváhagyott retailer rekord
     try {
       const retailerDoc = await getDoc(doc(db, "retailers", user.uid));
       if (retailerDoc.exists() && retailerDoc.data().status === "approved") {
-        document.getElementById("dashboard-company").textContent = retailerDoc.data().companyName || "";
+        currentRetailer = { uid: user.uid, data: retailerDoc.data() };
+        document.getElementById("dashboard-company").textContent = currentRetailer.data.companyName || "";
         entryScreen.classList.add("hidden");
         successScreen.classList.add("hidden");
+        orderSuccessScreen.classList.add("hidden");
         dashboardScreen.classList.remove("hidden");
+        loadCatalog();
       } else {
-        // Bejelentkezett, de nincs approved retailer rekordja hozzá — biztonságból kiléptetjük
         await signOut(auth);
       }
     } catch (err) {
       console.error("Retailer adat lekérési hiba:", err);
       await signOut(auth);
     }
+  });
+
+  // --- Katalógus + kosár ---
+  const orderSuccessScreen = document.getElementById("order-success-screen");
+  const cartBar = document.getElementById("cart-bar");
+  let allProducts = [];
+  const cart = {}; // sku -> qty
+
+  async function loadCatalog() {
+    const q = query(collection(db, "wholesaleProducts"), where("visible", "==", true));
+    const snapshot = await getDocs(q);
+    allProducts = [];
+    snapshot.forEach((docSnap) => allProducts.push({ sku: docSnap.id, ...docSnap.data() }));
+    allProducts.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+    renderCatalog(allProducts);
+  }
+
+  document.getElementById("catalog-search").addEventListener("input", (e) => {
+    const term = e.target.value.trim().toLowerCase();
+    const filtered = allProducts.filter(p =>
+      (p.title || "").toLowerCase().includes(term) || p.sku.toLowerCase().includes(term)
+    );
+    renderCatalog(filtered);
+  });
+
+  function getUnitPrice(product, qty) {
+    const customPricing = (currentRetailer.data.customPricing || {})[product.sku];
+    if (customPricing != null) return customPricing;
+
+    const tiers = product.priceTiers || [];
+    if (!tiers.length) return null; // nincs beállított wholesale ár erre a termékre
+
+    let applicable = tiers[0];
+    for (const t of tiers) {
+      if (qty >= t.minQty) applicable = t;
+    }
+    return applicable.price;
+  }
+
+  function formatPrice(amount) {
+    return `${amount.toLocaleString("hu-HU")} ${currentRetailer.data.currency}`;
+  }
+
+  function renderCatalog(products) {
+    const list = document.getElementById("catalog-list");
+    list.innerHTML = "";
+
+    products.forEach((product) => {
+      const moq = product.moq || 1;
+      const soldOut = (product.stock ?? 0) <= 0;
+      const qty = cart[product.sku] || 0;
+      const unitPrice = getUnitPrice(product, qty || moq);
+
+      const row = document.createElement("div");
+      row.className = "flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3";
+
+      const priceLine = unitPrice != null
+        ? `${formatPrice(unitPrice)}${product.retailPrice ? ` <span class="text-gray-400 line-through ml-1">${product.retailPrice} Ft bolti</span>` : ""}`
+        : `<span class="text-gray-400">Ár egyeztetés alatt</span>`;
+
+      row.innerHTML = `
+        <div class="text-sm min-w-0">
+          <div class="font-medium truncate">${product.title || product.sku}</div>
+          <div class="text-gray-400 text-xs">SKU: ${product.sku} · Minimum: ${moq} db</div>
+          <div class="text-xs mt-0.5">${priceLine}</div>
+        </div>
+        <div class="shrink-0">
+          ${soldOut
+            ? `<span class="text-xs text-red-500">Elfogyott</span>`
+            : `
+              <div class="flex items-center gap-2">
+                <button class="qty-minus w-7 h-7 border rounded text-sm">−</button>
+                <span class="qty-display w-8 text-center text-sm">${qty}</span>
+                <button class="qty-plus w-7 h-7 border rounded text-sm">+</button>
+              </div>
+            `}
+        </div>
+      `;
+
+      if (!soldOut) {
+        row.querySelector(".qty-plus").addEventListener("click", () => {
+          cart[product.sku] = (cart[product.sku] || 0) === 0 ? moq : cart[product.sku] + 1;
+          renderCatalog(allProducts.filter(p => document.getElementById("catalog-search").value.trim()
+            ? (p.title || "").toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase()) || p.sku.toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase())
+            : true));
+          updateCartBar();
+        });
+        row.querySelector(".qty-minus").addEventListener("click", () => {
+          const current = cart[product.sku] || 0;
+          if (current <= moq) delete cart[product.sku];
+          else cart[product.sku] = current - 1;
+          renderCatalog(allProducts.filter(p => document.getElementById("catalog-search").value.trim()
+            ? (p.title || "").toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase()) || p.sku.toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase())
+            : true));
+          updateCartBar();
+        });
+      }
+
+      list.appendChild(row);
+    });
+  }
+
+  function updateCartBar() {
+    const skus = Object.keys(cart);
+    if (skus.length === 0) {
+      cartBar.classList.add("hidden");
+      return;
+    }
+    let total = 0;
+    skus.forEach((sku) => {
+      const product = allProducts.find(p => p.sku === sku);
+      const qty = cart[sku];
+      const unitPrice = getUnitPrice(product, qty) || 0;
+      total += unitPrice * qty;
+    });
+    document.getElementById("cart-total").textContent = formatPrice(total);
+    cartBar.classList.remove("hidden");
+  }
+
+  document.getElementById("submit-order-btn").addEventListener("click", async () => {
+    const errorEl = document.getElementById("cart-error");
+    errorEl.classList.add("hidden");
+
+    const items = Object.keys(cart).map((sku) => {
+      const product = allProducts.find(p => p.sku === sku);
+      const qty = cart[sku];
+      const unitPrice = getUnitPrice(product, qty) || 0;
+      return { sku, title: product.title, qty, unitPrice, lineTotal: unitPrice * qty };
+    });
+
+    if (!items.length) return;
+
+    const total = items.reduce((sum, i) => sum + i.lineTotal, 0);
+
+    try {
+      await addDoc(collection(db, "orders"), {
+        retailerId: currentRetailer.uid,
+        retailerCompany: currentRetailer.data.companyName,
+        currency: currentRetailer.data.currency,
+        items,
+        total,
+        status: "submitted",
+        createdAt: serverTimestamp(),
+      });
+
+      Object.keys(cart).forEach(k => delete cart[k]);
+      cartBar.classList.add("hidden");
+      dashboardScreen.classList.add("hidden");
+      orderSuccessScreen.classList.remove("hidden");
+    } catch (err) {
+      errorEl.textContent = `Hiba a rendelés leadása során: ${err.code || err.message}`;
+      errorEl.classList.remove("hidden");
+      console.error(err);
+    }
+  });
+
+  document.getElementById("order-success-back-btn").addEventListener("click", () => {
+    orderSuccessScreen.classList.add("hidden");
+    dashboardScreen.classList.remove("hidden");
+    loadCatalog();
   });
 
   // --- Regisztráció ---
