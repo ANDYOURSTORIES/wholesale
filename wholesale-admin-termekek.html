@@ -37,14 +37,8 @@
   <!-- Termékek nézet -->
   <div id="tab-products">
     <div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
-      <select id="line-filter" class="border rounded px-3 py-1.5 text-sm">
-        <option value="ALL">Összes vonal</option>
-        <option value="CDL">CDL</option>
-        <option value="DIFI">DIFI</option>
-        <option value="FUFU">FUFU</option>
-        <option value="CAR">CAR</option>
-        <option value="EGYEB">Egyéb</option>
-      </select>
+      <input id="product-search" type="text" placeholder="Keresés termék vagy SKU alapján..."
+             class="border rounded px-3 py-1.5 text-sm w-64">
       <div class="flex gap-2">
         <button id="bulk-toggle-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">☑️ Tömeges szerkesztés</button>
         <button id="sync-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">🛍️ Szinkronizálás most</button>
@@ -81,7 +75,6 @@
             <th class="px-3 py-2 font-medium">Látható</th>
             <th class="px-3 py-2 font-medium">SKU</th>
             <th class="px-3 py-2 font-medium">Termék</th>
-            <th class="px-3 py-2 font-medium">Vonal</th>
             <th class="px-3 py-2 font-medium">Típus</th>
             <th class="px-3 py-2 font-medium">Készlet</th>
             <th class="px-3 py-2 font-medium">MOQ</th>
@@ -255,7 +248,7 @@
   let currentProducts = []; // [{sku, data}]
   let currentCategories = []; // [{id, data: {label, prices: {type: {type, tiers/fixedPrice}}}}]
   let bulkMode = false;
-  let lineFilter = "ALL";
+  let searchTerm = "";
   const selectedSkus = new Set();
 
   // ============== TERMÉKEK ==============
@@ -284,14 +277,16 @@
       [...types].sort().map(t => `<option value="${t}">`).join("");
   }
 
-  document.getElementById("line-filter").addEventListener("change", (e) => {
-    lineFilter = e.target.value;
+  document.getElementById("product-search").addEventListener("input", (e) => {
+    searchTerm = e.target.value.trim().toLowerCase();
     renderTable();
   });
 
   function getFilteredProducts() {
-    if (lineFilter === "ALL") return currentProducts;
-    return currentProducts.filter(p => (p.data.productLine || "EGYEB") === lineFilter);
+    if (!searchTerm) return currentProducts;
+    return currentProducts.filter(({ sku, data }) =>
+      sku.toLowerCase().includes(searchTerm) || (data.title || "").toLowerCase().includes(searchTerm)
+    );
   }
 
   function renderTable() {
@@ -307,8 +302,6 @@
     const tr = document.createElement("tr");
     tr.className = "border-b border-gray-100";
 
-    const productLine = data.productLine || "EGYEB";
-
     tr.innerHTML = `
       <td class="px-3 py-2 ${bulkMode ? "" : "hidden"}">
         <input type="checkbox" class="row-select w-4 h-4" ${selectedSkus.has(sku) ? "checked" : ""}>
@@ -322,11 +315,6 @@
       </td>
       <td class="px-3 py-2 font-mono text-xs">${sku}</td>
       <td class="px-3 py-2">${data.title || ""}</td>
-      <td class="px-3 py-2">
-        <select class="line-select border rounded px-1.5 py-1 text-xs">
-          ${PRODUCT_LINES.map(l => `<option value="${l}" ${l === productLine ? "selected" : ""}>${l}</option>`).join("")}
-        </select>
-      </td>
       <td class="px-3 py-2">
         <input type="text" list="type-suggestions" value="${data.productType || ''}" placeholder="pl. CDL100"
                class="type-input w-24 border rounded px-2 py-1 text-xs">
@@ -350,10 +338,6 @@
 
     tr.querySelector(".moq-input").addEventListener("change", (e) => {
       updateDoc(docRef, { moq: parseInt(e.target.value, 10) || 1 });
-    });
-
-    tr.querySelector(".line-select").addEventListener("change", (e) => {
-      updateDoc(docRef, { productLine: e.target.value });
     });
 
     tr.querySelector(".type-input").addEventListener("change", (e) => {
