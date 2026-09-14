@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wholesale admin — Termékek</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Bejelentkezés -->
+<div id="login-screen" class="flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-sm">
+    <h1 class="text-lg font-semibold mb-4">Wholesale admin</h1>
+    <input id="login-email" type="email" placeholder="Email" class="w-full border rounded px-3 py-2 mb-2 text-sm">
+    <input id="login-password" type="password" placeholder="Jelszó" class="w-full border rounded px-3 py-2 mb-4 text-sm">
+    <button id="login-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium">Belépés</button>
+    <p id="login-error" class="text-red-600 text-xs mt-2 hidden"></p>
+  </div>
+</div>
+
+<!-- Admin felület -->
+<div id="admin-screen" class="hidden max-w-6xl mx-auto px-4 py-6">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-lg font-semibold">Wholesale admin</h1>
+    <button id="logout-btn" class="text-sm text-gray-500">Kilépés</button>
+  </div>
+
+  <div class="flex gap-1 mb-5 border-b border-gray-200">
+    <button id="tab-products-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-gray-900">Termékek</button>
+    <button id="tab-retailers-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">
+      Retailerek <span id="pending-count-badge" class="hidden bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-1"></span>
+    </button>
+  </div>
+
+  <!-- Termékek nézet -->
+  <div id="tab-products">
+    <div class="flex items-center justify-end gap-2 mb-4">
+      <button id="bulk-toggle-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">☑️ Tömeges szerkesztés</button>
+      <button id="sync-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">🛍️ Szinkronizálás most</button>
+    </div>
+    <p id="sync-status" class="text-xs text-gray-500 mb-4"></p>
+
+  <!-- Tömeges szerkesztés sáv -->
+  <div id="bulk-bar" class="hidden bg-gray-900 text-white rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center gap-3 text-sm">
+    <span id="bulk-count">0 kijelölve</span>
+    <button id="bulk-show-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Láthatóvá tétel</button>
+    <button id="bulk-hide-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Elrejtés</button>
+    <span class="border-l border-white/20 pl-3 flex items-center gap-2">
+      MOQ:
+      <input id="bulk-moq-input" type="number" min="1" class="w-16 rounded px-2 py-1 text-gray-900 text-sm">
+      <button id="bulk-moq-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Alkalmaz</button>
+    </span>
+    <button id="bulk-tiers-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Ársáv sablon alkalmazása</button>
+  </div>
+
+  <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-200 text-left text-gray-500">
+          <th id="th-select" class="px-3 py-2 font-medium hidden">
+            <input type="checkbox" id="select-all">
+          </th>
+          <th class="px-3 py-2 font-medium">Látható</th>
+          <th class="px-3 py-2 font-medium">SKU</th>
+          <th class="px-3 py-2 font-medium">Termék</th>
+          <th class="px-3 py-2 font-medium">Készlet</th>
+          <th class="px-3 py-2 font-medium">MOQ</th>
+          <th class="px-3 py-2 font-medium">Ársávok</th>
+        </tr>
+      </thead>
+      <tbody id="product-rows"></tbody>
+    </table>
+  </div>
+  </div>
+
+  <!-- Retailerek nézet -->
+  <div id="tab-retailers" class="hidden">
+    <h2 class="text-sm font-semibold text-gray-500 mb-2">Függőben lévő regisztrációk</h2>
+    <div id="pending-retailers" class="space-y-2 mb-8"></div>
+
+    <h2 class="text-sm font-semibold text-gray-500 mb-2">Jóváhagyott retailerek</h2>
+    <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 text-left text-gray-500">
+            <th class="px-3 py-2 font-medium">Cég</th>
+            <th class="px-3 py-2 font-medium">Email</th>
+            <th class="px-3 py-2 font-medium">Pénznem</th>
+            <th class="px-3 py-2 font-medium">Jóváhagyva</th>
+          </tr>
+        </thead>
+        <tbody id="approved-retailers"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Ársáv szerkesztő modal -->
+<div id="tiers-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+  <div class="bg-white rounded-lg p-5 w-full max-w-sm">
+    <h2 id="tiers-modal-title" class="font-semibold mb-3 text-sm">Ársávok szerkesztése</h2>
+    <div id="tiers-rows" class="space-y-2 mb-3"></div>
+    <button id="tiers-add-row" class="text-sm text-blue-600 mb-4">+ Sáv hozzáadása</button>
+    <div class="flex justify-end gap-2">
+      <button id="tiers-cancel" class="text-sm text-gray-500 px-3 py-1.5">Mégse</button>
+      <button id="tiers-save" class="text-sm bg-gray-900 text-white rounded px-3 py-1.5">Mentés</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import {
+    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import {
+    getFirestore, collection, onSnapshot, doc, updateDoc, orderBy, query, writeBatch, where
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ⚠️ Illeszd be ugyanazt a firebaseConfig blokkot, amit az app.andyourstories.com
+  // index.html / alapanyagok.html fájlja is használ (ays-production-5ab41 projekt).
+  const firebaseConfig = {
+    apiKey: "AIzaSyBKEAA01f16INT22nX2fSV8YGOfB3fDuMw",
+    authDomain: "ays-production-5ab41.firebaseapp.com",
+    projectId: "ays-production-5ab41",
+    storageBucket: "ays-production-5ab41.firebasestorage.app",
+    messagingSenderId: "642343737324",
+    appId: "1:642343737324:web:2a2f1bd9455cb83a2752c9"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Admin e-mail whitelist — vedd fel Márti címét is
+  const ADMIN_EMAILS = ["juraj.german@andyourstories.com"];
+
+  // Cloud Function URL-ek
+  const SYNC_FUNCTION_URL = "https://wholesale-shopify-sync-642343737324.europe-west1.run.app";
+  const APPROVE_FUNCTION_URL = "https://wholesale-approve-retailer-642343737324.europe-west1.run.app";
+
+  const loginScreen = document.getElementById("login-screen");
+  const adminScreen = document.getElementById("admin-screen");
+  const loginError = document.getElementById("login-error");
+
+  document.getElementById("login-btn").addEventListener("click", async () => {
+    const email = document.getElementById("login-email").value;
+    const password = document.getElementById("login-password").value;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      loginError.textContent = `Hiba: ${err.code || err.message}`;
+      loginError.classList.remove("hidden");
+      console.error("Bejelentkezési hiba:", err);
+    }
+  });
+
+  document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+
+  onAuthStateChanged(auth, (user) => {
+    if (user && ADMIN_EMAILS.includes(user.email)) {
+      loginScreen.classList.add("hidden");
+      adminScreen.classList.remove("hidden");
+      listenToProducts();
+      listenToRetailers();
+    } else {
+      if (user) signOut(auth);
+      loginScreen.classList.remove("hidden");
+      adminScreen.classList.add("hidden");
+    }
+  });
+
+  // --- Tab váltás ---
+  const tabProductsBtn = document.getElementById("tab-products-btn");
+  const tabRetailersBtn = document.getElementById("tab-retailers-btn");
+  const tabProducts = document.getElementById("tab-products");
+  const tabRetailers = document.getElementById("tab-retailers");
+
+  function activateTab(tab) {
+    const isProducts = tab === "products";
+    tabProducts.classList.toggle("hidden", !isProducts);
+    tabRetailers.classList.toggle("hidden", isProducts);
+    tabProductsBtn.classList.toggle("border-gray-900", isProducts);
+    tabProductsBtn.classList.toggle("border-transparent", !isProducts);
+    tabProductsBtn.classList.toggle("text-gray-500", !isProducts);
+    tabRetailersBtn.classList.toggle("border-gray-900", !isProducts);
+    tabRetailersBtn.classList.toggle("border-transparent", isProducts);
+    tabRetailersBtn.classList.toggle("text-gray-500", isProducts);
+  }
+  tabProductsBtn.addEventListener("click", () => activateTab("products"));
+  tabRetailersBtn.addEventListener("click", () => activateTab("retailers"));
+
+  // --- Állapot ---
+  let currentProducts = []; // [{sku, data}]
+  let bulkMode = false;
+  const selectedSkus = new Set();
+
+  function listenToProducts() {
+    const q = query(collection(db, "wholesaleProducts"), orderBy("title"));
+    onSnapshot(
+      q,
+      (snapshot) => {
+        currentProducts = [];
+        snapshot.forEach((docSnap) => currentProducts.push({ sku: docSnap.id, data: docSnap.data() }));
+        renderTable();
+      },
+      (err) => {
+        console.error("Firestore olvasási hiba:", err);
+        document.getElementById("sync-status").textContent = `Firestore hiba: ${err.code || err.message}`;
+      }
+    );
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById("product-rows");
+    tbody.innerHTML = "";
+    currentProducts.forEach(({ sku, data }) => tbody.appendChild(renderRow(sku, data)));
+    document.getElementById("th-select").classList.toggle("hidden", !bulkMode);
+    updateBulkBar();
+  }
+
+  function renderRow(sku, data) {
+    const tr = document.createElement("tr");
+    tr.className = "border-b border-gray-100";
+
+    const priceTiers = data.priceTiers || [];
+    const tiersSummary = priceTiers.length
+      ? priceTiers.map(t => `${t.minQty}+ db → ${t.price}`).join(" · ")
+      : "Nincs beállítva";
+
+    tr.innerHTML = `
+      <td class="px-3 py-2 ${bulkMode ? "" : "hidden"}">
+        <input type="checkbox" class="row-select w-4 h-4" ${selectedSkus.has(sku) ? "checked" : ""}>
+      </td>
+      <td class="px-3 py-2">
+        <input type="checkbox" class="visible-toggle w-4 h-4" ${data.visible ? "checked" : ""}>
+      </td>
+      <td class="px-3 py-2 font-mono text-xs">${sku}</td>
+      <td class="px-3 py-2">${data.title || ""}</td>
+      <td class="px-3 py-2 text-gray-500">${data.stock ?? "-"}</td>
+      <td class="px-3 py-2">
+        <input type="number" class="moq-input w-16 border rounded px-2 py-1 text-sm" value="${data.moq ?? 1}" min="1">
+      </td>
+      <td class="px-3 py-2">
+        <button class="tiers-edit-btn text-blue-600 hover:underline text-left text-xs">${tiersSummary}</button>
+      </td>
+    `;
+
+    const docRef = doc(db, "wholesaleProducts", sku);
+
+    tr.querySelector(".row-select").addEventListener("change", (e) => {
+      if (e.target.checked) selectedSkus.add(sku); else selectedSkus.delete(sku);
+      updateBulkBar();
+    });
+
+    tr.querySelector(".visible-toggle").addEventListener("change", (e) => {
+      updateDoc(docRef, { visible: e.target.checked });
+    });
+
+    tr.querySelector(".moq-input").addEventListener("change", (e) => {
+      updateDoc(docRef, { moq: parseInt(e.target.value, 10) || 1 });
+    });
+
+    tr.querySelector(".tiers-edit-btn").addEventListener("click", () => {
+      openTiersModal([sku], priceTiers);
+    });
+
+    return tr;
+  }
+
+  // --- Tömeges szerkesztés ---
+  const bulkToggleBtn = document.getElementById("bulk-toggle-btn");
+  const bulkBar = document.getElementById("bulk-bar");
+  const selectAllCheckbox = document.getElementById("select-all");
+
+  bulkToggleBtn.addEventListener("click", () => {
+    bulkMode = !bulkMode;
+    bulkToggleBtn.classList.toggle("bg-gray-900", bulkMode);
+    bulkToggleBtn.classList.toggle("text-white", bulkMode);
+    if (!bulkMode) selectedSkus.clear();
+    renderTable();
+  });
+
+  selectAllCheckbox.addEventListener("change", (e) => {
+    if (e.target.checked) currentProducts.forEach(p => selectedSkus.add(p.sku));
+    else selectedSkus.clear();
+    renderTable();
+  });
+
+  function updateBulkBar() {
+    bulkBar.classList.toggle("hidden", !bulkMode || selectedSkus.size === 0);
+    document.getElementById("bulk-count").textContent = `${selectedSkus.size} kijelölve`;
+  }
+
+  document.getElementById("bulk-show-btn").addEventListener("click", () => bulkSetVisible(true));
+  document.getElementById("bulk-hide-btn").addEventListener("click", () => bulkSetVisible(false));
+
+  async function bulkSetVisible(visible) {
+    const batch = writeBatch(db);
+    selectedSkus.forEach(sku => batch.update(doc(db, "wholesaleProducts", sku), { visible }));
+    await batch.commit();
+  }
+
+  document.getElementById("bulk-moq-btn").addEventListener("click", async () => {
+    const moq = parseInt(document.getElementById("bulk-moq-input").value, 10);
+    if (!moq || moq < 1) return;
+    const batch = writeBatch(db);
+    selectedSkus.forEach(sku => batch.update(doc(db, "wholesaleProducts", sku), { moq }));
+    await batch.commit();
+  });
+
+  document.getElementById("bulk-tiers-btn").addEventListener("click", () => {
+    openTiersModal([...selectedSkus], []);
+  });
+
+  // --- Ársáv modal ---
+  const tiersModal = document.getElementById("tiers-modal");
+  const tiersRows = document.getElementById("tiers-rows");
+  let tiersModalTargetSkus = [];
+
+  function openTiersModal(skus, initialTiers) {
+    tiersModalTargetSkus = skus;
+    document.getElementById("tiers-modal-title").textContent =
+      skus.length > 1 ? `Ársáv sablon alkalmazása ${skus.length} termékre` : `Ársávok — ${skus[0]}`;
+    tiersRows.innerHTML = "";
+    (initialTiers.length ? initialTiers : [{ minQty: "", price: "" }]).forEach(addTierRow);
+    tiersModal.classList.remove("hidden");
+  }
+
+  function addTierRow(tier = { minQty: "", price: "" }) {
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-2";
+    row.innerHTML = `
+      <input type="number" min="1" placeholder="Mennyiségtől" value="${tier.minQty}"
+             class="tier-min w-28 border rounded px-2 py-1 text-sm">
+      <span class="text-gray-400 text-sm">db →</span>
+      <input type="number" min="0" step="0.01" placeholder="Ár" value="${tier.price}"
+             class="tier-price w-24 border rounded px-2 py-1 text-sm">
+      <button class="tier-remove text-red-500 text-sm px-1">✕</button>
+    `;
+    row.querySelector(".tier-remove").addEventListener("click", () => row.remove());
+    tiersRows.appendChild(row);
+  }
+
+  document.getElementById("tiers-add-row").addEventListener("click", () => addTierRow());
+  document.getElementById("tiers-cancel").addEventListener("click", () => tiersModal.classList.add("hidden"));
+
+  document.getElementById("tiers-save").addEventListener("click", async () => {
+    const tiers = [...tiersRows.querySelectorAll(":scope > div")].map(row => ({
+      minQty: parseInt(row.querySelector(".tier-min").value, 10),
+      price: parseFloat(row.querySelector(".tier-price").value),
+    })).filter(t => t.minQty > 0 && !isNaN(t.price)).sort((a, b) => a.minQty - b.minQty);
+
+    const batch = writeBatch(db);
+    tiersModalTargetSkus.forEach(sku => batch.update(doc(db, "wholesaleProducts", sku), { priceTiers: tiers }));
+    await batch.commit();
+    tiersModal.classList.add("hidden");
+  });
+
+  // --- Sync gomb ---
+  document.getElementById("sync-btn").addEventListener("click", async () => {
+    const status = document.getElementById("sync-status");
+    status.textContent = "Szinkronizálás folyamatban...";
+    try {
+      const res = await fetch(SYNC_FUNCTION_URL);
+      const text = await res.text();
+      status.textContent = text;
+    } catch (err) {
+      status.textContent = "Hiba a szinkronizálás közben: " + err.message;
+    }
+  });
+
+  // --- Retailerek ---
+  function listenToRetailers() {
+    const pendingQ = query(collection(db, "retailers"), where("status", "==", "pending"));
+    onSnapshot(pendingQ, (snapshot) => {
+      const container = document.getElementById("pending-retailers");
+      const badge = document.getElementById("pending-count-badge");
+      container.innerHTML = "";
+
+      if (snapshot.empty) {
+        container.innerHTML = `<p class="text-sm text-gray-400">Nincs függőben lévő regisztráció.</p>`;
+      }
+      badge.textContent = snapshot.size || "";
+      badge.classList.toggle("hidden", snapshot.empty);
+
+      snapshot.forEach((docSnap) => {
+        const r = docSnap.data();
+        const card = document.createElement("div");
+        card.className = "bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between gap-4";
+        card.innerHTML = `
+          <div class="text-sm">
+            <div class="font-medium">${r.companyName}</div>
+            <div class="text-gray-500">${r.email} · ${r.contactName || ""} · ${r.phone || ""}</div>
+            <div class="text-gray-400 text-xs">Adószám: ${r.taxNumber || "-"} · ${r.address || "-"} · ${r.currency}</div>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button class="approve-btn bg-gray-900 text-white rounded px-3 py-1.5 text-sm">Elfogad</button>
+            <button class="reject-btn text-red-600 text-sm px-2">Elutasít</button>
+          </div>
+        `;
+
+        card.querySelector(".approve-btn").addEventListener("click", async (e) => {
+          e.target.disabled = true;
+          e.target.textContent = "Feldolgozás...";
+          try {
+            const idToken = await auth.currentUser.getIdToken();
+            const res = await fetch(APPROVE_FUNCTION_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({ pendingRetailerId: docSnap.id }),
+            });
+            const text = await res.text();
+            if (!res.ok) throw new Error(text);
+          } catch (err) {
+            alert(`Hiba a jóváhagyás során: ${err.message}`);
+            e.target.disabled = false;
+            e.target.textContent = "Elfogad";
+          }
+        });
+
+        card.querySelector(".reject-btn").addEventListener("click", async () => {
+          if (!confirm(`Biztosan elutasítod: ${r.companyName}?`)) return;
+          await updateDoc(doc(db, "retailers", docSnap.id), { status: "rejected" });
+        });
+
+        container.appendChild(card);
+      });
+    });
+
+    const approvedQ = query(collection(db, "retailers"), where("status", "==", "approved"));
+    onSnapshot(approvedQ, (snapshot) => {
+      const tbody = document.getElementById("approved-retailers");
+      tbody.innerHTML = "";
+      snapshot.forEach((docSnap) => {
+        const r = docSnap.data();
+        const tr = document.createElement("tr");
+        tr.className = "border-b border-gray-100";
+        const approvedDate = r.approvedAt ? new Date(r.approvedAt).toLocaleDateString("hu-HU") : "-";
+        tr.innerHTML = `
+          <td class="px-3 py-2">${r.companyName}</td>
+          <td class="px-3 py-2 text-gray-500">${r.email}</td>
+          <td class="px-3 py-2">${r.currency}</td>
+          <td class="px-3 py-2 text-gray-500">${approvedDate}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+  }
+</script>
+
+</body>
+</html>

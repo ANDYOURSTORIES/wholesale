@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANDYOURSTORIES Wholesale — Regisztráció</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div id="form-screen" class="flex items-center justify-center min-h-screen py-10 px-4">
+  <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-md">
+    <h1 class="text-lg font-semibold mb-1">Wholesale regisztráció</h1>
+    <p class="text-sm text-gray-500 mb-5">Töltsd ki az adataidat — a regisztrációt manuálisan hagyjuk jóvá, ezután emailben kapsz hozzáférést.</p>
+
+    <div class="space-y-3">
+      <input id="f-companyName" type="text" placeholder="Cégnév *" class="w-full border rounded px-3 py-2 text-sm">
+      <input id="f-taxNumber" type="text" placeholder="Adószám / EU VAT szám *" class="w-full border rounded px-3 py-2 text-sm">
+      <input id="f-address" type="text" placeholder="Cím *" class="w-full border rounded px-3 py-2 text-sm">
+      <input id="f-contactName" type="text" placeholder="Kapcsolattartó neve *" class="w-full border rounded px-3 py-2 text-sm">
+      <input id="f-email" type="email" placeholder="Email *" class="w-full border rounded px-3 py-2 text-sm">
+      <input id="f-phone" type="tel" placeholder="Telefonszám" class="w-full border rounded px-3 py-2 text-sm">
+      <select id="f-currency" class="w-full border rounded px-3 py-2 text-sm">
+        <option value="HUF">Számlázás pénzneme: HUF</option>
+        <option value="EUR">Számlázás pénzneme: EUR</option>
+      </select>
+    </div>
+
+    <button id="submit-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium mt-5">Regisztráció elküldése</button>
+    <p id="form-error" class="text-red-600 text-xs mt-2 hidden"></p>
+  </div>
+</div>
+
+<div id="success-screen" class="hidden flex items-center justify-center min-h-screen px-4">
+  <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-md text-center">
+    <h1 class="text-lg font-semibold mb-2">Köszönjük!</h1>
+    <p class="text-sm text-gray-600">A regisztrációdat megkaptuk, hamarosan átnézzük. Jóváhagyás után emailben küldünk egy linket a jelszó beállításához.</p>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBKEAA01f16INT22nX2fSV8YGOfB3fDuMw",
+    authDomain: "ays-production-5ab41.firebaseapp.com",
+    projectId: "ays-production-5ab41",
+    storageBucket: "ays-production-5ab41.firebasestorage.app",
+    messagingSenderId: "642343737324",
+    appId: "1:642343737324:web:2a2f1bd9455cb83a2752c9"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  document.getElementById("submit-btn").addEventListener("click", async () => {
+    const companyName = document.getElementById("f-companyName").value.trim();
+    const taxNumber = document.getElementById("f-taxNumber").value.trim();
+    const address = document.getElementById("f-address").value.trim();
+    const contactName = document.getElementById("f-contactName").value.trim();
+    const email = document.getElementById("f-email").value.trim();
+    const phone = document.getElementById("f-phone").value.trim();
+    const currency = document.getElementById("f-currency").value;
+
+    const errorEl = document.getElementById("form-error");
+    if (!companyName || !taxNumber || !address || !contactName || !email) {
+      errorEl.textContent = "Kérjük, tölts ki minden csillaggal jelölt mezőt.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "retailers"), {
+        companyName, taxNumber, address, contactName, email, phone, currency,
+        status: "pending",
+        customPricing: {},
+        createdAt: serverTimestamp(),
+      });
+      document.getElementById("form-screen").classList.add("hidden");
+      document.getElementById("success-screen").classList.remove("hidden");
+    } catch (err) {
+      errorEl.textContent = `Hiba történt: ${err.code || err.message}`;
+      errorEl.classList.remove("hidden");
+      console.error(err);
+    }
+  });
+</script>
+
+</body>
+</html>
