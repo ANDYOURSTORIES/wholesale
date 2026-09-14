@@ -222,13 +222,15 @@
     renderCatalog(allProducts);
   }
 
-  document.getElementById("catalog-search").addEventListener("input", (e) => {
-    const term = e.target.value.trim().toLowerCase();
-    const filtered = allProducts.filter(p =>
-      (p.title || "").toLowerCase().includes(term) || p.sku.toLowerCase().includes(term)
-    );
+  document.getElementById("catalog-search").addEventListener("input", () => rerenderFilteredCatalog());
+
+  function rerenderFilteredCatalog() {
+    const term = document.getElementById("catalog-search").value.trim().toLowerCase();
+    const filtered = term
+      ? allProducts.filter(p => (p.title || "").toLowerCase().includes(term) || p.sku.toLowerCase().includes(term))
+      : allProducts;
     renderCatalog(filtered);
-  });
+  }
 
   function getUnitPrice(product, qty) {
     if (!product.productType) return null; // nincs beállítva típus ehhez a termékhez
@@ -260,9 +262,13 @@
 
     products.forEach((product) => {
       const moq = product.moq || 1;
-      const soldOut = (product.stock ?? 0) <= 0;
+      const stock = product.stock ?? 0;
+      const soldOut = stock <= 0;
+      const effectiveMin = Math.min(moq, stock); // ha a készlet a MOQ alatt van, a készlet lesz az elérhető minimum/maximum is
       const qty = cart[product.sku] || 0;
-      const unitPrice = getUnitPrice(product, qty || moq);
+      const unitPrice = getUnitPrice(product, qty || effectiveMin);
+      const atMax = qty >= stock;
+      const stockLimited = stock > 0 && stock < moq;
 
       const row = document.createElement("div");
       row.className = "flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3";
@@ -271,12 +277,16 @@
         ? `${formatPrice(unitPrice)}${product.retailPrice ? ` <span class="text-gray-400 line-through ml-1">${product.retailPrice} Ft bolti</span>` : ""}`
         : `<span class="text-gray-400">Ár egyeztetés alatt</span>`;
 
+      const moqLine = stockLimited
+        ? `Jelenleg csak ${stock} db rendelhető (készlet miatt, eredeti minimum: ${moq} db)`
+        : `Minimum: ${moq} db`;
+
       row.innerHTML = `
         <img src="${product.imageUrl || ''}" onerror="this.style.visibility='hidden'"
              class="w-14 h-14 rounded object-cover bg-gray-100 shrink-0 ${product.imageUrl ? '' : 'invisible'}">
         <div class="text-sm min-w-0 flex-1">
           <div class="font-medium truncate">${product.title || product.sku}</div>
-          <div class="text-gray-400 text-xs">SKU: ${product.sku} · Minimum: ${moq} db</div>
+          <div class="text-gray-400 text-xs">SKU: ${product.sku} · ${moqLine}</div>
           <div class="text-xs mt-0.5">${priceLine}</div>
         </div>
         <div class="shrink-0">
@@ -286,7 +296,7 @@
               <div class="flex items-center gap-2">
                 <button class="qty-minus w-7 h-7 border rounded text-sm">−</button>
                 <span class="qty-display w-8 text-center text-sm">${qty}</span>
-                <button class="qty-plus w-7 h-7 border rounded text-sm">+</button>
+                <button class="qty-plus w-7 h-7 border rounded text-sm" ${atMax ? "disabled style=\"opacity:0.3\"" : ""}>+</button>
               </div>
             `}
         </div>
@@ -294,19 +304,17 @@
 
       if (!soldOut) {
         row.querySelector(".qty-plus").addEventListener("click", () => {
-          cart[product.sku] = (cart[product.sku] || 0) === 0 ? moq : cart[product.sku] + 1;
-          renderCatalog(allProducts.filter(p => document.getElementById("catalog-search").value.trim()
-            ? (p.title || "").toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase()) || p.sku.toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase())
-            : true));
+          const current = cart[product.sku] || 0;
+          const next = current === 0 ? effectiveMin : Math.min(current + 1, stock);
+          cart[product.sku] = next;
+          rerenderFilteredCatalog();
           updateCartBar();
         });
         row.querySelector(".qty-minus").addEventListener("click", () => {
           const current = cart[product.sku] || 0;
-          if (current <= moq) delete cart[product.sku];
+          if (current <= effectiveMin) delete cart[product.sku];
           else cart[product.sku] = current - 1;
-          renderCatalog(allProducts.filter(p => document.getElementById("catalog-search").value.trim()
-            ? (p.title || "").toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase()) || p.sku.toLowerCase().includes(document.getElementById("catalog-search").value.trim().toLowerCase())
-            : true));
+          rerenderFilteredCatalog();
           updateCartBar();
         });
       }
