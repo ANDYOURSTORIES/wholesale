@@ -37,8 +37,13 @@
   <!-- Termékek nézet -->
   <div id="tab-products">
     <div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
-      <input id="product-search" type="text" placeholder="Keresés termék vagy SKU alapján..."
-             class="border rounded px-3 py-1.5 text-sm w-64">
+      <div class="flex gap-2">
+        <input id="product-search" type="text" placeholder="Keresés termék vagy SKU alapján..."
+               class="border rounded px-3 py-1.5 text-sm w-64">
+        <select id="type-filter" class="border rounded px-3 py-1.5 text-sm">
+          <option value="ALL">Összes típus</option>
+        </select>
+      </div>
       <div class="flex gap-2">
         <button id="bulk-toggle-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">☑️ Tömeges szerkesztés</button>
         <button id="sync-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">🛍️ Szinkronizálás most</button>
@@ -73,10 +78,10 @@
             </th>
             <th class="px-3 py-2 font-medium"></th>
             <th class="px-3 py-2 font-medium">Látható</th>
-            <th class="px-3 py-2 font-medium">SKU</th>
-            <th class="px-3 py-2 font-medium">Termék</th>
-            <th class="px-3 py-2 font-medium">Típus</th>
-            <th class="px-3 py-2 font-medium">Készlet</th>
+            <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="sku">SKU <span class="sort-arrow"></span></th>
+            <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="title">Termék <span class="sort-arrow"></span></th>
+            <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="productType">Típus <span class="sort-arrow"></span></th>
+            <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="stock">Készlet <span class="sort-arrow"></span></th>
             <th class="px-3 py-2 font-medium">MOQ</th>
           </tr>
         </thead>
@@ -249,6 +254,9 @@
   let currentCategories = []; // [{id, data: {label, prices: {type: {type, tiers/fixedPrice}}}}]
   let bulkMode = false;
   let searchTerm = "";
+  let typeFilter = "ALL";
+  let sortField = null;
+  let sortDirection = "asc";
   const selectedSkus = new Set();
 
   // ============== TERMÉKEK ==============
@@ -273,8 +281,18 @@
   function updateTypeSuggestions() {
     const types = new Set();
     currentProducts.forEach(p => { if (p.data.productType) types.add(p.data.productType); });
+    const sortedTypes = [...types].sort();
+
     document.getElementById("type-suggestions").innerHTML =
-      [...types].sort().map(t => `<option value="${t}">`).join("");
+      sortedTypes.map(t => `<option value="${t}">`).join("");
+
+    const typeFilterSelect = document.getElementById("type-filter");
+    const previousValue = typeFilterSelect.value;
+    typeFilterSelect.innerHTML = `<option value="ALL">Összes típus</option>` +
+      sortedTypes.map(t => `<option value="${t}">${t}</option>`).join("");
+    if ([...typeFilterSelect.options].some(o => o.value === previousValue)) {
+      typeFilterSelect.value = previousValue;
+    }
   }
 
   document.getElementById("product-search").addEventListener("input", (e) => {
@@ -282,11 +300,54 @@
     renderTable();
   });
 
+  document.getElementById("type-filter").addEventListener("change", (e) => {
+    typeFilter = e.target.value;
+    renderTable();
+  });
+
+  document.querySelectorAll("th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const field = th.dataset.sort;
+      if (sortField === field) {
+        sortDirection = sortDirection === "asc" ? "desc" : "asc";
+      } else {
+        sortField = field;
+        sortDirection = "asc";
+      }
+      renderTable();
+    });
+  });
+
   function getFilteredProducts() {
-    if (!searchTerm) return currentProducts;
-    return currentProducts.filter(({ sku, data }) =>
-      sku.toLowerCase().includes(searchTerm) || (data.title || "").toLowerCase().includes(searchTerm)
-    );
+    let list = currentProducts;
+
+    if (searchTerm) {
+      list = list.filter(({ sku, data }) =>
+        sku.toLowerCase().includes(searchTerm) || (data.title || "").toLowerCase().includes(searchTerm)
+      );
+    }
+
+    if (typeFilter !== "ALL") {
+      list = list.filter(({ data }) => (data.productType || "") === typeFilter);
+    }
+
+    if (sortField) {
+      list = [...list].sort((a, b) => {
+        const getVal = (item) => {
+          if (sortField === "sku") return item.sku;
+          if (sortField === "stock") return item.data.stock ?? 0;
+          return item.data[sortField] || "";
+        };
+        const va = getVal(a);
+        const vb = getVal(b);
+        let cmp;
+        if (typeof va === "number" && typeof vb === "number") cmp = va - vb;
+        else cmp = String(va).localeCompare(String(vb));
+        return sortDirection === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return list;
   }
 
   function renderTable() {
@@ -296,6 +357,11 @@
     filtered.forEach(({ sku, data }) => tbody.appendChild(renderRow(sku, data)));
     document.getElementById("th-select").classList.toggle("hidden", !bulkMode);
     updateBulkBar();
+
+    document.querySelectorAll("th[data-sort]").forEach((th) => {
+      const arrow = th.querySelector(".sort-arrow");
+      arrow.textContent = th.dataset.sort === sortField ? (sortDirection === "asc" ? "▲" : "▼") : "";
+    });
   }
 
   function renderRow(sku, data) {
