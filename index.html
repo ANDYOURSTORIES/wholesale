@@ -231,21 +231,17 @@
   });
 
   function getUnitPrice(product, qty) {
-    // 1. Legspecifikusabb: konkrét termékre beállított fix ár erre a retailerre
-    const customPricing = (currentRetailer.data.customPricing || {})[product.sku];
-    if (customPricing != null) return customPricing;
+    if (!product.productType) return null; // nincs beállítva típus ehhez a termékhez
 
-    // 2. A retailer termékvonalankénti felülírása (pl. ennél a retailernél minden CDL-es CDL-Fix1 áron megy)
-    const lineOverride = (currentRetailer.data.categoryByLine || {})[product.productLine];
-    const effectiveCategoryId = lineOverride || product.priceCategory;
-    if (!effectiveCategoryId) return null; // nincs beállított kategória erre a termékre/retailerre
+    const category = categoriesMap[currentRetailer.data.categoryId];
+    if (!category) return null; // a retailerhez nincs (vagy törölt) kategória rendelve
 
-    const category = categoriesMap[effectiveCategoryId];
-    if (!category) return null;
+    const rule = (category.prices || {})[product.productType];
+    if (!rule) return null; // ebben a kategóriában nincs ár megadva erre a típusra
 
-    if (category.type === "fixed") return category.fixedPrice;
+    if (rule.type === "fixed") return rule.fixedPrice;
 
-    const tiers = category.tiers || [];
+    const tiers = rule.tiers || [];
     if (!tiers.length) return null;
     let applicable = tiers[0];
     for (const t of tiers) {

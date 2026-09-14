@@ -63,11 +63,12 @@
         <button id="bulk-moq-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Alkalmaz</button>
       </span>
       <span class="border-l border-white/20 pl-3 flex items-center gap-2">
-        Kategória:
-        <select id="bulk-category-select" class="rounded px-2 py-1 text-gray-900 text-sm"></select>
-        <button id="bulk-category-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Alkalmaz</button>
+        Típus:
+        <input id="bulk-type-input" list="type-suggestions" placeholder="pl. CDL100" class="rounded px-2 py-1 text-gray-900 text-sm w-28">
+        <button id="bulk-type-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Alkalmaz</button>
       </span>
     </div>
+    <datalist id="type-suggestions"></datalist>
 
     <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
       <table class="w-full text-sm">
@@ -81,9 +82,9 @@
             <th class="px-3 py-2 font-medium">SKU</th>
             <th class="px-3 py-2 font-medium">Termék</th>
             <th class="px-3 py-2 font-medium">Vonal</th>
+            <th class="px-3 py-2 font-medium">Típus</th>
             <th class="px-3 py-2 font-medium">Készlet</th>
             <th class="px-3 py-2 font-medium">MOQ</th>
-            <th class="px-3 py-2 font-medium">Kategória</th>
           </tr>
         </thead>
         <tbody id="product-rows"></tbody>
@@ -93,23 +94,11 @@
 
   <!-- Árkategóriák nézet -->
   <div id="tab-categories" class="hidden">
+    <p class="text-xs text-gray-500 mb-4">Egy kategória egy teljes árlista — több termék-típusra egyszerre adhatsz meg árat/sávokat, és ezt rendeled majd egy retailerhez.</p>
     <div class="flex justify-end mb-4">
       <button id="new-category-btn" class="bg-gray-900 text-white rounded px-3 py-1.5 text-sm">+ Új kategória</button>
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="border-b border-gray-200 text-left text-gray-500">
-            <th class="px-3 py-2 font-medium">Azonosító</th>
-            <th class="px-3 py-2 font-medium">Vonal</th>
-            <th class="px-3 py-2 font-medium">Típus</th>
-            <th class="px-3 py-2 font-medium">Részletek</th>
-            <th class="px-3 py-2 font-medium">Műveletek</th>
-          </tr>
-        </thead>
-        <tbody id="category-rows"></tbody>
-      </table>
-    </div>
+    <div id="category-list" class="space-y-3"></div>
   </div>
 
   <!-- Retailerek nézet -->
@@ -124,6 +113,7 @@
           <tr class="border-b border-gray-200 text-left text-gray-500">
             <th class="px-3 py-2 font-medium">Cég</th>
             <th class="px-3 py-2 font-medium">Email</th>
+            <th class="px-3 py-2 font-medium">Kategória</th>
             <th class="px-3 py-2 font-medium">Pénznem</th>
             <th class="px-3 py-2 font-medium">Jóváhagyva</th>
             <th class="px-3 py-2 font-medium">Műveletek</th>
@@ -136,35 +126,16 @@
 </div>
 
 <!-- Árkategória szerkesztő modal -->
-<div id="category-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-  <div class="bg-white rounded-lg p-5 w-full max-w-sm">
+<div id="category-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 overflow-y-auto">
+  <div class="bg-white rounded-lg p-5 w-full max-w-lg my-8">
     <h2 id="category-modal-title" class="font-semibold mb-3 text-sm">Új árkategória</h2>
 
-    <div class="space-y-3 mb-3">
-      <input id="cat-id" type="text" placeholder="Azonosító (pl. CDL-1 vagy CDL-Fix1)" class="w-full border rounded px-3 py-2 text-sm">
-      <select id="cat-line" class="w-full border rounded px-3 py-2 text-sm">
-        <option value="CDL">CDL</option>
-        <option value="DIFI">DIFI</option>
-        <option value="FUFU">FUFU</option>
-        <option value="CAR">CAR</option>
-        <option value="EGYEB">Egyéb</option>
-      </select>
-      <input id="cat-label" type="text" placeholder="Megjelenített név (opcionális)" class="w-full border rounded px-3 py-2 text-sm">
-      <select id="cat-type" class="w-full border rounded px-3 py-2 text-sm">
-        <option value="tiered">Sávos (mennyiség alapján)</option>
-        <option value="fixed">Fix ár</option>
-      </select>
+    <div class="space-y-3 mb-4">
+      <input id="cat-id" type="text" placeholder="Azonosító (pl. 1-es kategória vagy Fix1)" class="w-full border rounded px-3 py-2 text-sm">
     </div>
 
-    <div id="cat-tiers-section">
-      <div id="cat-tiers-rows" class="space-y-2 mb-2"></div>
-      <button id="cat-add-tier-row" class="text-sm text-blue-600 mb-3">+ Sáv hozzáadása</button>
-    </div>
-
-    <div id="cat-fixed-section" class="hidden mb-3">
-      <input id="cat-fixed-price" type="number" min="0" step="0.01" placeholder="Fix ár"
-             class="w-full border rounded px-3 py-2 text-sm">
-    </div>
+    <div id="cat-type-rows" class="space-y-3 mb-3"></div>
+    <button id="cat-add-type-row" class="text-sm text-blue-600 mb-4">+ Termék típus hozzáadása</button>
 
     <p id="category-error" class="text-red-600 text-xs mb-2 hidden"></p>
     <div class="flex justify-end gap-2">
@@ -180,8 +151,8 @@
     <h2 class="font-semibold mb-3">Retailer részletei</h2>
     <div id="retailer-details-body" class="space-y-1.5 text-gray-700 mb-4"></div>
 
-    <h3 class="font-medium text-xs text-gray-500 mb-2">Árkategória vonalanként</h3>
-    <div id="retailer-details-categories" class="space-y-2 mb-3"></div>
+    <h3 class="font-medium text-xs text-gray-500 mb-2">Árkategória</h3>
+    <select id="retailer-details-category-select" class="w-full border rounded px-3 py-2 text-sm mb-4"></select>
 
     <div class="flex justify-end gap-2">
       <button id="retailer-details-close" class="text-sm text-gray-500 px-3 py-1.5">Bezárás</button>
@@ -282,7 +253,7 @@
 
   // --- Állapot ---
   let currentProducts = []; // [{sku, data}]
-  let currentCategories = []; // [{id, data}]
+  let currentCategories = []; // [{id, data: {label, prices: {type: {type, tiers/fixedPrice}}}}]
   let bulkMode = false;
   let lineFilter = "ALL";
   const selectedSkus = new Set();
@@ -297,12 +268,20 @@
         currentProducts = [];
         snapshot.forEach((docSnap) => currentProducts.push({ sku: docSnap.id, data: docSnap.data() }));
         renderTable();
+        updateTypeSuggestions();
       },
       (err) => {
         console.error("Firestore olvasási hiba:", err);
         document.getElementById("sync-status").textContent = `Firestore hiba: ${err.code || err.message}`;
       }
     );
+  }
+
+  function updateTypeSuggestions() {
+    const types = new Set();
+    currentProducts.forEach(p => { if (p.data.productType) types.add(p.data.productType); });
+    document.getElementById("type-suggestions").innerHTML =
+      [...types].sort().map(t => `<option value="${t}">`).join("");
   }
 
   document.getElementById("line-filter").addEventListener("change", (e) => {
@@ -322,17 +301,6 @@
     filtered.forEach(({ sku, data }) => tbody.appendChild(renderRow(sku, data)));
     document.getElementById("th-select").classList.toggle("hidden", !bulkMode);
     updateBulkBar();
-  }
-
-  function categoryOptionsForLine(line, selectedId) {
-    const opts = [`<option value="">— Nincs —</option>`];
-    currentCategories
-      .filter(c => c.data.productLine === line)
-      .forEach(c => {
-        const label = c.data.label ? `${c.id} — ${c.data.label}` : c.id;
-        opts.push(`<option value="${c.id}" ${c.id === selectedId ? "selected" : ""}>${label}</option>`);
-      });
-    return opts.join("");
   }
 
   function renderRow(sku, data) {
@@ -359,14 +327,13 @@
           ${PRODUCT_LINES.map(l => `<option value="${l}" ${l === productLine ? "selected" : ""}>${l}</option>`).join("")}
         </select>
       </td>
+      <td class="px-3 py-2">
+        <input type="text" list="type-suggestions" value="${data.productType || ''}" placeholder="pl. CDL100"
+               class="type-input w-24 border rounded px-2 py-1 text-xs">
+      </td>
       <td class="px-3 py-2 text-gray-500">${data.stock ?? "-"}</td>
       <td class="px-3 py-2">
         <input type="number" class="moq-input w-16 border rounded px-2 py-1 text-sm" value="${data.moq ?? 1}" min="1">
-      </td>
-      <td class="px-3 py-2">
-        <select class="category-select border rounded px-1.5 py-1 text-xs">
-          ${categoryOptionsForLine(productLine, data.priceCategory || "")}
-        </select>
       </td>
     `;
 
@@ -386,11 +353,11 @@
     });
 
     tr.querySelector(".line-select").addEventListener("change", (e) => {
-      updateDoc(docRef, { productLine: e.target.value, priceCategory: null });
+      updateDoc(docRef, { productLine: e.target.value });
     });
 
-    tr.querySelector(".category-select").addEventListener("change", (e) => {
-      updateDoc(docRef, { priceCategory: e.target.value || null });
+    tr.querySelector(".type-input").addEventListener("change", (e) => {
+      updateDoc(docRef, { productType: e.target.value.trim() || null });
     });
 
     return tr;
@@ -419,15 +386,6 @@
   function updateBulkBar() {
     bulkBar.classList.toggle("hidden", !bulkMode || selectedSkus.size === 0);
     document.getElementById("bulk-count").textContent = `${selectedSkus.size} kijelölve`;
-    renderBulkCategoryOptions();
-  }
-
-  function renderBulkCategoryOptions() {
-    const select = document.getElementById("bulk-category-select");
-    select.innerHTML = currentCategories.map(c => {
-      const typeLabel = c.data.type === "fixed" ? "fix" : "sávos";
-      return `<option value="${c.id}">${c.id} (${c.data.productLine}, ${typeLabel})</option>`;
-    }).join("");
   }
 
   document.getElementById("bulk-show-btn").addEventListener("click", () => bulkSetVisible(true));
@@ -447,11 +405,11 @@
     await batch.commit();
   });
 
-  document.getElementById("bulk-category-btn").addEventListener("click", async () => {
-    const categoryId = document.getElementById("bulk-category-select").value;
-    if (!categoryId) return;
+  document.getElementById("bulk-type-btn").addEventListener("click", async () => {
+    const type = document.getElementById("bulk-type-input").value.trim();
+    if (!type) return;
     const batch = writeBatch(db);
-    selectedSkus.forEach(sku => batch.update(doc(db, "wholesaleProducts", sku), { priceCategory: categoryId }));
+    selectedSkus.forEach(sku => batch.update(doc(db, "wholesaleProducts", sku), { productType: type }));
     await batch.commit();
   });
 
@@ -462,56 +420,53 @@
       currentCategories = [];
       snapshot.forEach(docSnap => currentCategories.push({ id: docSnap.id, data: docSnap.data() }));
       currentCategories.sort((a, b) => a.id.localeCompare(b.id));
-      renderCategoryTable();
-      renderTable(); // a termék-sorok kategória-legördülőit is frissítjük
-      renderBulkCategoryOptions();
+      renderCategoryList();
+      renderRetailerCategorySelectOptions();
     });
   }
 
-  function renderCategoryTable() {
-    const tbody = document.getElementById("category-rows");
-    tbody.innerHTML = "";
+  function renderCategoryList() {
+    const container = document.getElementById("category-list");
+    container.innerHTML = "";
     currentCategories.forEach(({ id, data }) => {
-      const tr = document.createElement("tr");
-      tr.className = "border-b border-gray-100";
-      const details = data.type === "fixed"
-        ? `Fix ár: ${data.fixedPrice}`
-        : (data.tiers || []).map(t => `${t.minQty}+ db → ${t.price}`).join(" · ");
-      tr.innerHTML = `
-        <td class="px-3 py-2 font-medium">${id}${data.label ? ` <span class="text-gray-400 font-normal">(${data.label})</span>` : ""}</td>
-        <td class="px-3 py-2">${data.productLine}</td>
-        <td class="px-3 py-2">${data.type === "fixed" ? "Fix" : "Sávos"}</td>
-        <td class="px-3 py-2 text-xs text-gray-500">${details || "-"}</td>
-        <td class="px-3 py-2">
-          <button class="cat-edit-btn text-blue-600 hover:underline text-xs mr-3">Szerkesztés</button>
-          <button class="cat-delete-btn text-red-600 hover:underline text-xs">Törlés</button>
-        </td>
+      const card = document.createElement("div");
+      card.className = "bg-white border border-gray-200 rounded-lg p-4";
+      const prices = data.prices || {};
+      const rows = Object.keys(prices).map(type => {
+        const rule = prices[type];
+        const detail = rule.type === "fixed"
+          ? `Fix: ${rule.fixedPrice}`
+          : (rule.tiers || []).map(t => `${t.minQty}+ → ${t.price}`).join(" · ");
+        return `<div class="text-xs text-gray-600"><span class="font-medium">${type}</span> — ${detail}</div>`;
+      }).join("") || `<div class="text-xs text-gray-400">Még nincs termék-típus hozzáadva.</div>`;
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-medium text-sm">${id}${data.label ? ` <span class="text-gray-400 font-normal">(${data.label})</span>` : ""}</div>
+          <div>
+            <button class="cat-edit-btn text-blue-600 hover:underline text-xs mr-3">Szerkesztés</button>
+            <button class="cat-delete-btn text-red-600 hover:underline text-xs">Törlés</button>
+          </div>
+        </div>
+        <div class="space-y-0.5">${rows}</div>
       `;
-      tr.querySelector(".cat-edit-btn").addEventListener("click", () => openCategoryModal({ id, data }));
-      tr.querySelector(".cat-delete-btn").addEventListener("click", async () => {
-        if (!confirm(`Törlöd a(z) "${id}" kategóriát? A rá hivatkozó termékek megtartják a beállítást, amíg át nem állítod őket.`)) return;
+      card.querySelector(".cat-edit-btn").addEventListener("click", () => openCategoryModal({ id, data }));
+      card.querySelector(".cat-delete-btn").addEventListener("click", async () => {
+        if (!confirm(`Törlöd a(z) "${id}" kategóriát? A rá hivatkozó retailerek árazása egyeztetés alattivá válik, amíg át nem állítod őket.`)) return;
         await deleteDoc(doc(db, "priceCategories", id));
       });
-      tbody.appendChild(tr);
+      container.appendChild(card);
     });
   }
 
   // --- Kategória modal ---
   const categoryModal = document.getElementById("category-modal");
-  const catTiersRows = document.getElementById("cat-tiers-rows");
-  let editingCategoryId = null;
+  const catTypeRows = document.getElementById("cat-type-rows");
 
   document.getElementById("new-category-btn").addEventListener("click", () => openCategoryModal(null));
   document.getElementById("category-cancel").addEventListener("click", () => categoryModal.classList.add("hidden"));
 
-  document.getElementById("cat-type").addEventListener("change", (e) => {
-    const isFixed = e.target.value === "fixed";
-    document.getElementById("cat-tiers-section").classList.toggle("hidden", isFixed);
-    document.getElementById("cat-fixed-section").classList.toggle("hidden", !isFixed);
-  });
-
   function openCategoryModal(existing) {
-    editingCategoryId = existing ? existing.id : null;
     document.getElementById("category-error").classList.add("hidden");
     document.getElementById("category-modal-title").textContent = existing ? `Kategória szerkesztése — ${existing.id}` : "Új árkategória";
 
@@ -519,80 +474,114 @@
     idInput.value = existing ? existing.id : "";
     idInput.disabled = !!existing;
 
-    document.getElementById("cat-line").value = existing ? existing.data.productLine : "CDL";
-    document.getElementById("cat-label").value = existing ? (existing.data.label || "") : "";
-    const type = existing ? existing.data.type : "tiered";
-    document.getElementById("cat-type").value = type;
-    document.getElementById("cat-tiers-section").classList.toggle("hidden", type === "fixed");
-    document.getElementById("cat-fixed-section").classList.toggle("hidden", type !== "fixed");
-    document.getElementById("cat-fixed-price").value = existing && existing.data.fixedPrice != null ? existing.data.fixedPrice : "";
-
-    catTiersRows.innerHTML = "";
-    const tiers = existing && existing.data.tiers ? existing.data.tiers : [{ minQty: "", price: "" }];
-    tiers.forEach(addCatTierRow);
+    catTypeRows.innerHTML = "";
+    const prices = existing ? (existing.data.prices || {}) : {};
+    const typeKeys = Object.keys(prices);
+    if (typeKeys.length) {
+      typeKeys.forEach(type => addTypeRow(type, prices[type]));
+    } else {
+      addTypeRow("", { type: "tiered", tiers: [{ minQty: "", price: "" }] });
+    }
 
     categoryModal.classList.remove("hidden");
   }
 
-  function addCatTierRow(tier = { minQty: "", price: "" }) {
-    const row = document.createElement("div");
-    row.className = "flex items-center gap-2";
-    row.innerHTML = `
-      <input type="number" min="1" placeholder="Mennyiségtől" value="${tier.minQty}"
-             class="tier-min w-28 border rounded px-2 py-1 text-sm">
-      <span class="text-gray-400 text-sm">db →</span>
-      <input type="number" min="0" step="0.01" placeholder="Ár" value="${tier.price}"
-             class="tier-price w-24 border rounded px-2 py-1 text-sm">
-      <button class="tier-remove text-red-500 text-sm px-1">✕</button>
+  function addTypeRow(productType, rule) {
+    const box = document.createElement("div");
+    box.className = "border border-gray-200 rounded-lg p-3";
+    box.innerHTML = `
+      <div class="flex items-center gap-2 mb-2">
+        <input type="text" list="type-suggestions" placeholder="Termék típus (pl. CDL100)" value="${productType}"
+               class="row-type-input flex-1 border rounded px-2 py-1 text-sm">
+        <select class="row-type-select border rounded px-2 py-1 text-sm">
+          <option value="tiered" ${rule.type !== "fixed" ? "selected" : ""}>Sávos</option>
+          <option value="fixed" ${rule.type === "fixed" ? "selected" : ""}>Fix ár</option>
+        </select>
+        <button class="row-remove text-red-500 text-sm px-1">✕</button>
+      </div>
+      <div class="row-tiers-section space-y-1.5 ${rule.type === "fixed" ? "hidden" : ""}">
+        <div class="row-tiers-rows space-y-1.5"></div>
+        <button type="button" class="row-add-tier text-xs text-blue-600">+ Sáv hozzáadása</button>
+      </div>
+      <div class="row-fixed-section ${rule.type === "fixed" ? "" : "hidden"}">
+        <input type="number" min="0" step="0.01" placeholder="Fix ár" value="${rule.fixedPrice != null ? rule.fixedPrice : ""}"
+               class="row-fixed-price w-32 border rounded px-2 py-1 text-sm">
+      </div>
     `;
-    row.querySelector(".tier-remove").addEventListener("click", () => row.remove());
-    catTiersRows.appendChild(row);
+
+    const tiersRowsContainer = box.querySelector(".row-tiers-rows");
+    function addTierRow(tier = { minQty: "", price: "" }) {
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2";
+      row.innerHTML = `
+        <input type="number" min="1" placeholder="Mennyiségtől" value="${tier.minQty}"
+               class="tier-min w-28 border rounded px-2 py-1 text-sm">
+        <span class="text-gray-400 text-sm">db →</span>
+        <input type="number" min="0" step="0.01" placeholder="Ár" value="${tier.price}"
+               class="tier-price w-24 border rounded px-2 py-1 text-sm">
+        <button type="button" class="tier-remove text-red-500 text-sm px-1">✕</button>
+      `;
+      row.querySelector(".tier-remove").addEventListener("click", () => row.remove());
+      tiersRowsContainer.appendChild(row);
+    }
+    (rule.tiers && rule.tiers.length ? rule.tiers : [{ minQty: "", price: "" }]).forEach(addTierRow);
+    box.querySelector(".row-add-tier").addEventListener("click", () => addTierRow());
+
+    box.querySelector(".row-type-select").addEventListener("change", (e) => {
+      const isFixed = e.target.value === "fixed";
+      box.querySelector(".row-tiers-section").classList.toggle("hidden", isFixed);
+      box.querySelector(".row-fixed-section").classList.toggle("hidden", !isFixed);
+    });
+
+    box.querySelector(".row-remove").addEventListener("click", () => box.remove());
+
+    catTypeRows.appendChild(box);
   }
-  document.getElementById("cat-add-tier-row").addEventListener("click", () => addCatTierRow());
+
+  document.getElementById("cat-add-type-row").addEventListener("click", () => addTypeRow("", { type: "tiered", tiers: [{ minQty: "", price: "" }] }));
 
   document.getElementById("category-save").addEventListener("click", async () => {
     const errorEl = document.getElementById("category-error");
     errorEl.classList.add("hidden");
 
     const id = document.getElementById("cat-id").value.trim();
-    const productLine = document.getElementById("cat-line").value;
-    const label = document.getElementById("cat-label").value.trim();
-    const type = document.getElementById("cat-type").value;
-
     if (!id) {
       errorEl.textContent = "Az azonosító kötelező.";
       errorEl.classList.remove("hidden");
       return;
     }
 
-    const payload = { productLine, label, type };
+    const prices = {};
+    const rowBoxes = [...catTypeRows.children];
+    for (const box of rowBoxes) {
+      const type = box.querySelector(".row-type-input").value.trim();
+      if (!type) continue;
+      const ruleType = box.querySelector(".row-type-select").value;
+      if (ruleType === "fixed") {
+        const price = parseFloat(box.querySelector(".row-fixed-price").value);
+        if (isNaN(price)) {
+          errorEl.textContent = `Add meg a fix árat ehhez: ${type}`;
+          errorEl.classList.remove("hidden");
+          return;
+        }
+        prices[type] = { type: "fixed", fixedPrice: price };
+      } else {
+        const tiers = [...box.querySelectorAll(".row-tiers-rows > div")].map(row => ({
+          minQty: parseInt(row.querySelector(".tier-min").value, 10),
+          price: parseFloat(row.querySelector(".tier-price").value),
+        })).filter(t => t.minQty > 0 && !isNaN(t.price)).sort((a, b) => a.minQty - b.minQty);
 
-    if (type === "fixed") {
-      const price = parseFloat(document.getElementById("cat-fixed-price").value);
-      if (isNaN(price)) {
-        errorEl.textContent = "Add meg a fix árat.";
-        errorEl.classList.remove("hidden");
-        return;
+        if (!tiers.length) {
+          errorEl.textContent = `Adj meg legalább egy érvényes sávot ehhez: ${type}`;
+          errorEl.classList.remove("hidden");
+          return;
+        }
+        prices[type] = { type: "tiered", tiers };
       }
-      payload.fixedPrice = price;
-      payload.tiers = [];
-    } else {
-      const tiers = [...catTiersRows.querySelectorAll(":scope > div")].map(row => ({
-        minQty: parseInt(row.querySelector(".tier-min").value, 10),
-        price: parseFloat(row.querySelector(".tier-price").value),
-      })).filter(t => t.minQty > 0 && !isNaN(t.price)).sort((a, b) => a.minQty - b.minQty);
-
-      if (!tiers.length) {
-        errorEl.textContent = "Adj meg legalább egy érvényes sávot.";
-        errorEl.classList.remove("hidden");
-        return;
-      }
-      payload.tiers = tiers;
-      payload.fixedPrice = null;
     }
 
     try {
-      await setDoc(doc(db, "priceCategories", id), payload);
+      await setDoc(doc(db, "priceCategories", id), { prices });
       categoryModal.classList.add("hidden");
     } catch (err) {
       errorEl.textContent = `Hiba: ${err.code || err.message}`;
@@ -615,32 +604,20 @@
 
   // ============== RETAILEREK ==============
 
-  function buildLineCategorySelects(container, currentByLine) {
-    container.innerHTML = "";
-    PRODUCT_LINES.filter(l => l !== "EGYEB").forEach((line) => {
-      const wrap = document.createElement("div");
-      wrap.className = "flex items-center gap-2 text-xs";
-      const options = [`<option value="">Alapértelmezett (termék szerint)</option>`]
-        .concat(currentCategories.filter(c => c.data.productLine === line).map(c => {
-          const typeLabel = c.data.type === "fixed" ? "fix" : "sávos";
-          return `<option value="${c.id}" ${currentByLine && currentByLine[line] === c.id ? "selected" : ""}>${c.id} (${typeLabel})</option>`;
-        }));
-      wrap.innerHTML = `
-        <span class="w-12 text-gray-500">${line}</span>
-        <select class="line-cat-select border rounded px-2 py-1 text-xs flex-1" data-line="${line}">
-          ${options.join("")}
-        </select>
-      `;
-      container.appendChild(wrap);
+  function categorySelectOptionsHtml(selectedId) {
+    const opts = [`<option value="">— Nincs kiválasztva —</option>`];
+    currentCategories.forEach(c => {
+      opts.push(`<option value="${c.id}" ${c.id === selectedId ? "selected" : ""}>${c.id}${c.data.label ? ` (${c.data.label})` : ""}</option>`);
     });
+    return opts.join("");
   }
 
-  function readLineCategorySelects(container) {
-    const result = {};
-    container.querySelectorAll(".line-cat-select").forEach((sel) => {
-      result[sel.dataset.line] = sel.value || null;
+  function renderRetailerCategorySelectOptions() {
+    // Frissíti a nyitva lévő pending kártyák select-jeit is, ha közben új kategória jött létre
+    document.querySelectorAll(".pending-category-select").forEach(sel => {
+      const current = sel.value;
+      sel.innerHTML = categorySelectOptionsHtml(current);
     });
-    return result;
   }
 
   function listenToRetailers() {
@@ -667,24 +644,28 @@
               <div class="text-gray-500">${r.email} · ${r.contactName || ""} · ${r.phone || ""}</div>
               <div class="text-gray-400 text-xs">Adószám: ${r.taxNumber || "-"} · ${r.address || "-"} · ${r.currency}</div>
             </div>
-            <div class="flex gap-2 shrink-0">
-              <button class="approve-btn bg-gray-900 text-white rounded px-3 py-1.5 text-sm">Elfogad</button>
-              <button class="reject-btn text-red-600 text-sm px-2">Elutasít</button>
-            </div>
           </div>
-          <div class="border-t border-gray-100 pt-3">
-            <div class="text-xs text-gray-500 mb-2">Árkategória vonalanként (jóváhagyás előtt válaszd ki):</div>
-            <div class="line-cat-container space-y-1.5"></div>
+          <div class="border-t border-gray-100 pt-3 flex items-center gap-3">
+            <label class="text-xs text-gray-500 shrink-0">Árkategória (kötelező jóváhagyás előtt):</label>
+            <select class="pending-category-select flex-1 border rounded px-2 py-1.5 text-sm">
+              ${categorySelectOptionsHtml("")}
+            </select>
+          </div>
+          <div class="flex justify-end gap-2 mt-3">
+            <button class="approve-btn bg-gray-900 text-white rounded px-3 py-1.5 text-sm">Elfogad</button>
+            <button class="reject-btn text-red-600 text-sm px-2">Elutasít</button>
           </div>
         `;
 
-        buildLineCategorySelects(card.querySelector(".line-cat-container"), null);
-
         card.querySelector(".approve-btn").addEventListener("click", async (e) => {
+          const categoryId = card.querySelector(".pending-category-select").value;
+          if (!categoryId) {
+            alert("Válassz árkategóriát a jóváhagyás előtt.");
+            return;
+          }
           e.target.disabled = true;
           e.target.textContent = "Feldolgozás...";
           try {
-            const categoryByLine = readLineCategorySelects(card.querySelector(".line-cat-container"));
             const idToken = await auth.currentUser.getIdToken();
             const res = await fetch(APPROVE_FUNCTION_URL, {
               method: "POST",
@@ -692,7 +673,7 @@
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${idToken}`,
               },
-              body: JSON.stringify({ pendingRetailerId: docSnap.id, categoryByLine }),
+              body: JSON.stringify({ pendingRetailerId: docSnap.id, categoryId }),
             });
             const text = await res.text();
             if (!res.ok) throw new Error(text);
@@ -724,6 +705,7 @@
         tr.innerHTML = `
           <td class="px-3 py-2">${r.companyName}</td>
           <td class="px-3 py-2 text-gray-500">${r.email}</td>
+          <td class="px-3 py-2">${r.categoryId || "-"}</td>
           <td class="px-3 py-2">${r.currency}</td>
           <td class="px-3 py-2 text-gray-500">${approvedDate}</td>
           <td class="px-3 py-2">
@@ -757,12 +739,11 @@
       <div><span class="text-gray-400">Jóváhagyva:</span> ${approvedDate}</div>
     `;
 
-    const catContainer = document.getElementById("retailer-details-categories");
-    buildLineCategorySelects(catContainer, r.categoryByLine || {});
+    const select = document.getElementById("retailer-details-category-select");
+    select.innerHTML = categorySelectOptionsHtml(r.categoryId || "");
 
     document.getElementById("retailer-details-save").onclick = async () => {
-      const categoryByLine = readLineCategorySelects(catContainer);
-      await updateDoc(doc(db, "retailers", retailerId), { categoryByLine });
+      await updateDoc(doc(db, "retailers", retailerId), { categoryId: select.value || null });
       document.getElementById("retailer-details-modal").classList.add("hidden");
     };
 
