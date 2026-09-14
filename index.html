@@ -203,14 +203,22 @@
   const orderSuccessScreen = document.getElementById("order-success-screen");
   const cartBar = document.getElementById("cart-bar");
   let allProducts = [];
+  let categoriesMap = {}; // categoryId -> { productLine, type, tiers, fixedPrice }
   const cart = {}; // sku -> qty
 
   async function loadCatalog() {
-    const q = query(collection(db, "wholesaleProducts"), where("visible", "==", true));
-    const snapshot = await getDocs(q);
+    const [productsSnap, categoriesSnap] = await Promise.all([
+      getDocs(query(collection(db, "wholesaleProducts"), where("visible", "==", true))),
+      getDocs(collection(db, "priceCategories")),
+    ]);
+
     allProducts = [];
-    snapshot.forEach((docSnap) => allProducts.push({ sku: docSnap.id, ...docSnap.data() }));
+    productsSnap.forEach((docSnap) => allProducts.push({ sku: docSnap.id, ...docSnap.data() }));
     allProducts.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+    categoriesMap = {};
+    categoriesSnap.forEach((docSnap) => { categoriesMap[docSnap.id] = docSnap.data(); });
+
     renderCatalog(allProducts);
   }
 
@@ -223,12 +231,22 @@
   });
 
   function getUnitPrice(product, qty) {
+    // 1. Legspecifikusabb: konkrét termékre beállított fix ár erre a retailerre
     const customPricing = (currentRetailer.data.customPricing || {})[product.sku];
     if (customPricing != null) return customPricing;
 
-    const tiers = product.priceTiers || [];
-    if (!tiers.length) return null; // nincs beállított wholesale ár erre a termékre
+    // 2. A retailer termékvonalankénti felülírása (pl. ennél a retailernél minden CDL-es CDL-Fix1 áron megy)
+    const lineOverride = (currentRetailer.data.categoryByLine || {})[product.productLine];
+    const effectiveCategoryId = lineOverride || product.priceCategory;
+    if (!effectiveCategoryId) return null; // nincs beállított kategória erre a termékre/retailerre
 
+    const category = categoriesMap[effectiveCategoryId];
+    if (!category) return null;
+
+    if (category.type === "fixed") return category.fixedPrice;
+
+    const tiers = category.tiers || [];
+    if (!tiers.length) return null;
     let applicable = tiers[0];
     for (const t of tiers) {
       if (qty >= t.minQty) applicable = t;
