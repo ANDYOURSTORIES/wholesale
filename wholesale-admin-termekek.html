@@ -882,10 +882,17 @@
 
   const STATUS_LABELS = {
     submitted: "Jóváhagyásra vár",
-    approved: "Jóváhagyva",
+    approved: "Díjbekérő kiküldve",
     paid: "Fizetve",
     rejected: "Elutasítva",
   };
+
+  function orderStatusLabel(o) {
+    if (o.status === "approved" && o.billingoEmailSent === false) {
+      return "Díjbekérő kiállítva (email nem ment ki)";
+    }
+    return STATUS_LABELS[o.status] || o.status;
+  }
 
   function openOrderPdf(o) {
     const rows = (o.items || []).map(i => `
@@ -911,7 +918,7 @@
       </head><body>
         <h1>Wholesale rendelés — ${o.retailerCompany || ""}</h1>
         <p>Dátum: ${formatOrderDate(o.createdAt)}</p>
-        <p>Státusz: ${STATUS_LABELS[o.status] || o.status}</p>
+        <p>Státusz: ${orderStatusLabel(o)}</p>
         <table>
           <thead><tr><th></th><th>SKU</th><th>Termék</th><th style="text-align:right;">Mennyiség</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -1014,12 +1021,12 @@
         tr.innerHTML = `
           <td class="px-3 py-2">${o.retailerCompany || "-"}</td>
           <td class="px-3 py-2">${o.total?.toLocaleString("hu-HU")} ${o.currency}</td>
-          <td class="px-3 py-2 ${statusColor}">${STATUS_LABELS[o.status] || o.status}${fulfilledBadge}</td>
+          <td class="px-3 py-2 ${statusColor}">${orderStatusLabel(o)}${fulfilledBadge}</td>
           <td class="px-3 py-2 text-gray-500">${formatOrderDate(o.createdAt)}</td>
           <td class="px-3 py-2">
             <button class="order-details-btn text-blue-600 hover:underline text-xs mr-3">Részletek</button>
             <button class="order-pdf-btn text-gray-600 hover:underline text-xs mr-3">PDF</button>
-            ${o.billingoPublicUrl ? `<a href="${o.billingoPublicUrl}" target="_blank" class="text-purple-600 hover:underline text-xs mr-3">Díjbekérő</a>` : ""}
+            ${o.billingoPublicUrl ? `<a href="${o.billingoPublicUrl}" target="_blank" class="text-purple-600 hover:underline text-xs mr-3">Megtekintés</a>` : ""}
             ${o.status === "approved" ? `<button class="order-paid-btn text-green-600 hover:underline text-xs mr-3">Fizetve</button>` : ""}
             ${!o.fulfilled ? `<button class="order-fulfilled-btn text-blue-600 hover:underline text-xs">Teljesítve</button>` : ""}
           </td>
@@ -1035,7 +1042,7 @@
 
         tr.querySelector(".order-details-btn").addEventListener("click", () => {
           document.getElementById("order-details-body").innerHTML = `
-            <div class="text-xs text-gray-500 mb-2">${o.retailerCompany} · ${formatOrderDate(o.createdAt)} · ${STATUS_LABELS[o.status] || o.status}</div>
+            <div class="text-xs text-gray-500 mb-2">${o.retailerCompany} · ${formatOrderDate(o.createdAt)} · ${orderStatusLabel(o)}</div>
             ${orderItemsHtml(o.items)}
             <div class="flex justify-between font-semibold text-sm border-t border-gray-100 pt-2 mt-2">
               <span>Összesen</span><span>${o.total?.toLocaleString("hu-HU")} ${o.currency}</span>
