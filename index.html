@@ -35,6 +35,7 @@
         <input id="f-companyName" type="text" placeholder="Cégnév *" class="w-full border rounded px-3 py-2 text-sm">
         <input id="f-taxNumber" type="text" placeholder="Adószám / EU VAT szám *" class="w-full border rounded px-3 py-2 text-sm">
         <input id="f-address" type="text" placeholder="Cím *" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-country" type="text" placeholder="Országkód (pl. HU, SK, DE) *" maxlength="2" class="w-full border rounded px-3 py-2 text-sm">
         <input id="f-contactName" type="text" placeholder="Kapcsolattartó neve *" class="w-full border rounded px-3 py-2 text-sm">
         <input id="f-email" type="email" placeholder="Email *" class="w-full border rounded px-3 py-2 text-sm">
         <input id="f-phone" type="tel" placeholder="Telefonszám" class="w-full border rounded px-3 py-2 text-sm">
@@ -388,13 +389,14 @@
     const companyName = document.getElementById("f-companyName").value.trim();
     const taxNumber = document.getElementById("f-taxNumber").value.trim();
     const address = document.getElementById("f-address").value.trim();
+    const countryCode = document.getElementById("f-country").value.trim().toUpperCase();
     const contactName = document.getElementById("f-contactName").value.trim();
     const email = document.getElementById("f-email").value.trim();
     const phone = document.getElementById("f-phone").value.trim();
     const currency = document.getElementById("f-currency").value;
 
     const errorEl = document.getElementById("form-error");
-    if (!companyName || !taxNumber || !address || !contactName || !email) {
+    if (!companyName || !taxNumber || !address || !countryCode || !contactName || !email) {
       errorEl.textContent = "Kérjük, tölts ki minden csillaggal jelölt mezőt.";
       errorEl.classList.remove("hidden");
       return;
@@ -402,7 +404,7 @@
 
     try {
       await addDoc(collection(db, "retailers"), {
-        companyName, taxNumber, address, contactName, email, phone, currency,
+        companyName, taxNumber, address, countryCode, contactName, email, phone, currency,
         status: "pending",
         customPricing: {},
         createdAt: serverTimestamp(),

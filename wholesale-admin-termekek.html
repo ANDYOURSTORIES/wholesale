@@ -227,6 +227,7 @@
   // Cloud Function URL-ek
   const SYNC_FUNCTION_URL = "https://wholesale-shopify-sync-642343737324.europe-west1.run.app";
   const APPROVE_FUNCTION_URL = "https://wholesale-approve-retailer-642343737324.europe-west1.run.app";
+  const INVOICE_FUNCTION_URL = "https://wholesale-create-invoice-642343737324.europe-west1.run.app";
 
   const loginScreen = document.getElementById("login-screen");
   const adminScreen = document.getElementById("admin-screen");
@@ -822,6 +823,7 @@
       <div><span class="text-gray-400">Cégnév:</span> ${r.companyName || "-"}</div>
       <div><span class="text-gray-400">Adószám:</span> ${r.taxNumber || "-"}</div>
       <div><span class="text-gray-400">Cím:</span> ${r.address || "-"}</div>
+      <div><span class="text-gray-400">Ország:</span> ${r.countryCode || "-"}</div>
       <div><span class="text-gray-400">Kapcsolattartó:</span> ${r.contactName || "-"}</div>
       <div><span class="text-gray-400">Email:</span> ${r.email || "-"}</div>
       <div><span class="text-gray-400">Telefon:</span> ${r.phone || "-"}</div>
@@ -868,6 +870,45 @@
     rejected: "Elutasítva",
   };
 
+  function openOrderPdf(o) {
+    const rows = (o.items || []).map(i => `
+      <tr>
+        <td style="padding:6px 8px; border-bottom:1px solid #ddd;">☐</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ddd;">${i.sku}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ddd;">${i.title || ""}</td>
+        <td style="padding:6px 8px; border-bottom:1px solid #ddd; text-align:right;">${i.qty}</td>
+      </tr>
+    `).join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="hu"><head><meta charset="UTF-8"><title>Rendelés — ${o.retailerCompany}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        p { margin: 2px 0; color: #555; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+        th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #111; }
+        @media print { body { padding: 0; } }
+      </style>
+      </head><body>
+        <h1>Wholesale rendelés — ${o.retailerCompany || ""}</h1>
+        <p>Dátum: ${formatOrderDate(o.createdAt)}</p>
+        <p>Státusz: ${STATUS_LABELS[o.status] || o.status}</p>
+        <table>
+          <thead><tr><th></th><th>SKU</th><th>Termék</th><th style="text-align:right;">Mennyiség</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="margin-top:16px; font-weight:bold;">Összesen: ${o.total?.toLocaleString("hu-HU")} ${o.currency}</p>
+        <script>window.onload = () => window.print();</script>
+      </body></html>
+    `;
+
+    const win = window.open("", "_blank");
+    win.document.write(html);
+    win.document.close();
+  }
+
   function listenToOrders() {
     const pendingQ = query(collection(db, "orders"), where("status", "==", "submitted"));
     onSnapshot(pendingQ, (snapshot) => {
@@ -896,6 +937,7 @@
             <div class="text-right shrink-0">
               <div class="font-semibold text-sm">${o.total?.toLocaleString("hu-HU")} ${o.currency}</div>
               <div class="flex gap-2 mt-2">
+                <button class="order-pdf-btn bg-white border border-gray-300 rounded px-3 py-1.5 text-xs">PDF</button>
                 <button class="order-approve-btn bg-gray-900 text-white rounded px-3 py-1.5 text-xs">Jóváhagy</button>
                 <button class="order-reject-btn text-red-600 text-xs px-2">Elutasít</button>
               </div>
@@ -904,9 +946,28 @@
           <div class="border-t border-gray-100 pt-2 space-y-1">${orderItemsHtml(o.items)}</div>
         `;
 
-        card.querySelector(".order-approve-btn").addEventListener("click", async () => {
-          // Megjegyzés: itt kapcsolódik majd be a Billingo díjbekérő automatikus kiküldése (később)
-          await updateDoc(doc(db, "orders", docSnap.id), { status: "approved", approvedAt: new Date().toISOString() });
+        card.querySelector(".order-pdf-btn").addEventListener("click", () => openOrderPdf(o));
+
+        card.querySelector(".order-approve-btn").addEventListener("click", async (e) => {
+          e.target.disabled = true;
+          e.target.textContent = "Díjbekérő kiállítása...";
+          try {
+            const idToken = await auth.currentUser.getIdToken();
+            const res = await fetch(INVOICE_FUNCTION_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({ orderId: docSnap.id }),
+            });
+            const text = await res.text();
+            if (!res.ok) throw new Error(text);
+          } catch (err) {
+            alert(`Hiba a jóváhagyás/számlázás során: ${err.message}`);
+            e.target.disabled = false;
+            e.target.textContent = "Jóváhagy";
+          }
         });
 
         card.querySelector(".order-reject-btn").addEventListener("click", async () => {
@@ -931,17 +992,29 @@
         tr.className = "border-b border-gray-100";
 
         const statusColor = o.status === "paid" ? "text-green-600" : o.status === "rejected" ? "text-red-500" : "text-amber-600";
+        const fulfilledBadge = o.fulfilled ? ` <span class="text-blue-600">✓ Teljesítve</span>` : "";
 
         tr.innerHTML = `
           <td class="px-3 py-2">${o.retailerCompany || "-"}</td>
           <td class="px-3 py-2">${o.total?.toLocaleString("hu-HU")} ${o.currency}</td>
-          <td class="px-3 py-2 ${statusColor}">${STATUS_LABELS[o.status] || o.status}</td>
+          <td class="px-3 py-2 ${statusColor}">${STATUS_LABELS[o.status] || o.status}${fulfilledBadge}</td>
           <td class="px-3 py-2 text-gray-500">${formatOrderDate(o.createdAt)}</td>
           <td class="px-3 py-2">
             <button class="order-details-btn text-blue-600 hover:underline text-xs mr-3">Részletek</button>
-            ${o.status === "approved" ? `<button class="order-paid-btn text-green-600 hover:underline text-xs">Fizetve</button>` : ""}
+            <button class="order-pdf-btn text-gray-600 hover:underline text-xs mr-3">PDF</button>
+            ${o.billingoPublicUrl ? `<a href="${o.billingoPublicUrl}" target="_blank" class="text-purple-600 hover:underline text-xs mr-3">Díjbekérő</a>` : ""}
+            ${o.status === "approved" ? `<button class="order-paid-btn text-green-600 hover:underline text-xs mr-3">Fizetve</button>` : ""}
+            ${!o.fulfilled ? `<button class="order-fulfilled-btn text-blue-600 hover:underline text-xs">Teljesítve</button>` : ""}
           </td>
         `;
+
+        tr.querySelector(".order-pdf-btn").addEventListener("click", () => openOrderPdf(o));
+
+        if (!o.fulfilled) {
+          tr.querySelector(".order-fulfilled-btn").addEventListener("click", async () => {
+            await updateDoc(doc(db, "orders", docSnap.id), { fulfilled: true, fulfilledAt: new Date().toISOString() });
+          });
+        }
 
         tr.querySelector(".order-details-btn").addEventListener("click", () => {
           document.getElementById("order-details-body").innerHTML = `
