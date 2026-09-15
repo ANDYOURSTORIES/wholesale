@@ -822,8 +822,19 @@
     body.innerHTML = `
       <div><span class="text-gray-400">Cégnév:</span> ${r.companyName || "-"}</div>
       <div><span class="text-gray-400">Adószám:</span> ${r.taxNumber || "-"}</div>
-      <div><span class="text-gray-400">Cím:</span> ${r.address || "-"}</div>
-      <div><span class="text-gray-400">Ország:</span> ${r.countryCode || "-"}</div>
+      <div class="flex items-center gap-2">
+        <span class="text-gray-400 shrink-0">Cím:</span>
+        <input id="rd-address" type="text" value="${r.address || ""}" class="flex-1 border rounded px-2 py-1 text-sm">
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-gray-400 shrink-0">Irsz. / Város:</span>
+        <input id="rd-postcode" type="text" value="${r.postCode || ""}" class="w-20 border rounded px-2 py-1 text-sm">
+        <input id="rd-city" type="text" value="${r.city || ""}" class="flex-1 border rounded px-2 py-1 text-sm">
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-gray-400 shrink-0">Ország:</span>
+        <input id="rd-country" type="text" value="${r.countryCode || ""}" maxlength="2" class="w-16 border rounded px-2 py-1 text-sm">
+      </div>
       <div><span class="text-gray-400">Kapcsolattartó:</span> ${r.contactName || "-"}</div>
       <div><span class="text-gray-400">Email:</span> ${r.email || "-"}</div>
       <div><span class="text-gray-400">Telefon:</span> ${r.phone || "-"}</div>
@@ -835,7 +846,13 @@
     select.innerHTML = categorySelectOptionsHtml(r.categoryId || "");
 
     document.getElementById("retailer-details-save").onclick = async () => {
-      await updateDoc(doc(db, "retailers", retailerId), { categoryId: select.value || null });
+      await updateDoc(doc(db, "retailers", retailerId), {
+        categoryId: select.value || null,
+        address: document.getElementById("rd-address").value.trim(),
+        postCode: document.getElementById("rd-postcode").value.trim(),
+        city: document.getElementById("rd-city").value.trim(),
+        countryCode: document.getElementById("rd-country").value.trim().toUpperCase(),
+      });
       document.getElementById("retailer-details-modal").classList.add("hidden");
     };
 
