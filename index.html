@@ -73,13 +73,7 @@
 <div id="dashboard-screen" class="hidden max-w-3xl mx-auto px-4 py-6 pb-28">
   <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
     <h1 class="text-lg font-semibold"><span data-i18n="welcome">Üdv, </span><span id="dashboard-company"></span>!</h1>
-    <div class="flex items-center gap-3">
-      <div class="flex text-xs border border-gray-300 rounded-full overflow-hidden">
-        <button id="currency-huf-btn" class="px-3 py-1.5 font-medium">HUF</button>
-        <button id="currency-eur-btn" class="px-3 py-1.5 font-medium text-gray-400">EUR</button>
-      </div>
-      <button id="dashboard-logout-btn" class="text-sm text-gray-500" data-i18n="logoutBtn">Kilépés</button>
-    </div>
+    <button id="dashboard-logout-btn" class="text-sm text-gray-500" data-i18n="logoutBtn">Kilépés</button>
   </div>
 
   <input id="catalog-search" type="text" data-i18n-placeholder="searchPlaceholder" placeholder="Keresés termék vagy SKU alapján..."
@@ -307,50 +301,6 @@
 
   document.getElementById("dashboard-logout-btn").addEventListener("click", () => signOut(auth));
 
-  // --- Pénznem-váltó ---
-  let displayCurrency = "HUF";
-  let hufToEurRate = null; // 1 HUF hány EUR
-
-  async function loadExchangeRate() {
-    try {
-      const res = await fetch("https://api.frankfurter.app/latest?from=HUF&to=EUR");
-      const data = await res.json();
-      hufToEurRate = data.rates.EUR;
-    } catch (err) {
-      console.error("Nem sikerült lekérni az árfolyamot:", err);
-    }
-  }
-
-  function roundUpToHalf(value) {
-    return Math.ceil(value * 2) / 2;
-  }
-
-  // A tárolt/számlázott alapár (a retailer saját pénzneme) átváltása a kiválasztott megjelenítési pénznemre
-  function convertForDisplay(amount) {
-    const base = currentRetailer.data.currency;
-    if (displayCurrency === base || !hufToEurRate) return { amount, currency: base };
-    if (base === "HUF" && displayCurrency === "EUR") {
-      return { amount: roundUpToHalf(amount * hufToEurRate), currency: "EUR" };
-    }
-    if (base === "EUR" && displayCurrency === "HUF") {
-      return { amount: Math.ceil(amount / hufToEurRate), currency: "HUF" };
-    }
-    return { amount, currency: base };
-  }
-
-  function setDisplayCurrency(cur) {
-    displayCurrency = cur;
-    document.getElementById("currency-huf-btn").classList.toggle("text-gray-400", cur !== "HUF");
-    document.getElementById("currency-huf-btn").classList.toggle("font-semibold", cur === "HUF");
-    document.getElementById("currency-eur-btn").classList.toggle("text-gray-400", cur !== "EUR");
-    document.getElementById("currency-eur-btn").classList.toggle("font-semibold", cur === "EUR");
-    rerenderFilteredCatalog();
-    updateCartBar();
-  }
-
-  document.getElementById("currency-huf-btn").addEventListener("click", () => setDisplayCurrency("HUF"));
-  document.getElementById("currency-eur-btn").addEventListener("click", () => setDisplayCurrency("EUR"));
-
   // --- Bejelentkezési állapot figyelése ---
   let currentRetailer = null; // { uid, data }
 
@@ -371,8 +321,6 @@
         successScreen.classList.add("hidden");
         orderSuccessScreen.classList.add("hidden");
         dashboardScreen.classList.remove("hidden");
-        setDisplayCurrency(currentRetailer.data.currency || "HUF");
-        loadExchangeRate();
         loadCatalog();
       } else if (retailerDoc.exists()) {
         // A dokumentum létezik, de nem approved (pl. rejected) — ez valódi jogosultsági ok, kiléptetjük
@@ -443,9 +391,9 @@
     return applicable.price;
   }
 
-  // Csak megjelenítésre — a ténylegesen számlázott ár mindig a retailer alap-pénznemében, változatlanul kerül mentésre
-  function formatPrice(baseAmount) {
-    const { amount, currency } = convertForDisplay(baseAmount);
+  // A retailer mindig a saját, regisztrációkor megadott pénznemében látja az árakat, konverzió nélkül
+  function formatPrice(amount) {
+    const currency = currentRetailer.data.currency;
     const decimals = currency === "EUR" ? 2 : 0;
     const localeStr = lang === "hu" ? "hu-HU" : "en-US";
     return `${amount.toLocaleString(localeStr, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${currency}`;
