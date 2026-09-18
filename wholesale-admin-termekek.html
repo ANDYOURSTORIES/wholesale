@@ -550,8 +550,8 @@
       const rows = Object.keys(prices).map(type => {
         const rule = prices[type];
         const detail = rule.type === "fixed"
-          ? `Fix: ${rule.fixedPrice}`
-          : (rule.tiers || []).map(t => `${t.minQty}+ → ${t.price}`).join(" · ");
+          ? `Fix: ${rule.fixedPriceHuf} HUF / ${rule.fixedPriceEur} EUR`
+          : (rule.tiers || []).map(t => `${t.minQty}+ → ${t.priceHuf} HUF / ${t.priceEur} EUR`).join(" · ");
         return `<div class="text-xs text-gray-600"><span class="font-medium">${type}</span> — ${detail}</div>`;
       }).join("") || `<div class="text-xs text-gray-400">Még nincs termék-típus hozzáadva.</div>`;
 
@@ -595,7 +595,7 @@
     if (typeKeys.length) {
       typeKeys.forEach(type => addTypeRow(type, prices[type]));
     } else {
-      addTypeRow("", { type: "tiered", tiers: [{ minQty: "", price: "" }] });
+      addTypeRow("", { type: "tiered", tiers: [{ minQty: "", priceHuf: "", priceEur: "" }] });
     }
 
     categoryModal.classList.remove("hidden");
@@ -618,28 +618,36 @@
         <div class="row-tiers-rows space-y-1.5"></div>
         <button type="button" class="row-add-tier text-xs text-blue-600">+ Sáv hozzáadása</button>
       </div>
-      <div class="row-fixed-section ${rule.type === "fixed" ? "" : "hidden"}">
-        <input type="number" min="0" step="0.01" placeholder="Fix ár" value="${rule.fixedPrice != null ? rule.fixedPrice : ""}"
-               class="row-fixed-price w-32 border rounded px-2 py-1 text-sm">
+      <div class="row-fixed-section flex items-center gap-2 ${rule.type === "fixed" ? "" : "hidden"}">
+        <input type="number" min="0" step="0.01" placeholder="Fix ár (HUF)" value="${rule.fixedPriceHuf != null ? rule.fixedPriceHuf : ""}"
+               class="row-fixed-price-huf w-28 border rounded px-2 py-1 text-sm">
+        <span class="text-gray-400 text-xs">HUF</span>
+        <input type="number" min="0" step="0.01" placeholder="Fix ár (EUR)" value="${rule.fixedPriceEur != null ? rule.fixedPriceEur : ""}"
+               class="row-fixed-price-eur w-28 border rounded px-2 py-1 text-sm">
+        <span class="text-gray-400 text-xs">EUR</span>
       </div>
     `;
 
     const tiersRowsContainer = box.querySelector(".row-tiers-rows");
-    function addTierRow(tier = { minQty: "", price: "" }) {
+    function addTierRow(tier = { minQty: "", priceHuf: "", priceEur: "" }) {
       const row = document.createElement("div");
       row.className = "flex items-center gap-2";
       row.innerHTML = `
         <input type="number" min="1" placeholder="Mennyiségtől" value="${tier.minQty}"
-               class="tier-min w-28 border rounded px-2 py-1 text-sm">
+               class="tier-min w-24 border rounded px-2 py-1 text-sm">
         <span class="text-gray-400 text-sm">db →</span>
-        <input type="number" min="0" step="0.01" placeholder="Ár" value="${tier.price}"
-               class="tier-price w-24 border rounded px-2 py-1 text-sm">
+        <input type="number" min="0" step="0.01" placeholder="Ár (HUF)" value="${tier.priceHuf}"
+               class="tier-price-huf w-20 border rounded px-2 py-1 text-sm">
+        <span class="text-gray-400 text-xs">HUF</span>
+        <input type="number" min="0" step="0.01" placeholder="Ár (EUR)" value="${tier.priceEur}"
+               class="tier-price-eur w-20 border rounded px-2 py-1 text-sm">
+        <span class="text-gray-400 text-xs">EUR</span>
         <button type="button" class="tier-remove text-red-500 text-sm px-1">✕</button>
       `;
       row.querySelector(".tier-remove").addEventListener("click", () => row.remove());
       tiersRowsContainer.appendChild(row);
     }
-    (rule.tiers && rule.tiers.length ? rule.tiers : [{ minQty: "", price: "" }]).forEach(addTierRow);
+    (rule.tiers && rule.tiers.length ? rule.tiers : [{ minQty: "", priceHuf: "", priceEur: "" }]).forEach(addTierRow);
     box.querySelector(".row-add-tier").addEventListener("click", () => addTierRow());
 
     box.querySelector(".row-type-select").addEventListener("change", (e) => {
@@ -653,7 +661,7 @@
     catTypeRows.appendChild(box);
   }
 
-  document.getElementById("cat-add-type-row").addEventListener("click", () => addTypeRow("", { type: "tiered", tiers: [{ minQty: "", price: "" }] }));
+  document.getElementById("cat-add-type-row").addEventListener("click", () => addTypeRow("", { type: "tiered", tiers: [{ minQty: "", priceHuf: "", priceEur: "" }] }));
 
   document.getElementById("category-save").addEventListener("click", async () => {
     const errorEl = document.getElementById("category-error");
@@ -673,21 +681,23 @@
       if (!type) continue;
       const ruleType = box.querySelector(".row-type-select").value;
       if (ruleType === "fixed") {
-        const price = parseFloat(box.querySelector(".row-fixed-price").value);
-        if (isNaN(price)) {
-          errorEl.textContent = `Add meg a fix árat ehhez: ${type}`;
+        const priceHuf = parseFloat(box.querySelector(".row-fixed-price-huf").value);
+        const priceEur = parseFloat(box.querySelector(".row-fixed-price-eur").value);
+        if (isNaN(priceHuf) || isNaN(priceEur)) {
+          errorEl.textContent = `Add meg mindkét (HUF és EUR) fix árat ehhez: ${type}`;
           errorEl.classList.remove("hidden");
           return;
         }
-        prices[type] = { type: "fixed", fixedPrice: price };
+        prices[type] = { type: "fixed", fixedPriceHuf: priceHuf, fixedPriceEur: priceEur };
       } else {
         const tiers = [...box.querySelectorAll(".row-tiers-rows > div")].map(row => ({
           minQty: parseInt(row.querySelector(".tier-min").value, 10),
-          price: parseFloat(row.querySelector(".tier-price").value),
-        })).filter(t => t.minQty > 0 && !isNaN(t.price)).sort((a, b) => a.minQty - b.minQty);
+          priceHuf: parseFloat(row.querySelector(".tier-price-huf").value),
+          priceEur: parseFloat(row.querySelector(".tier-price-eur").value),
+        })).filter(t => t.minQty > 0 && !isNaN(t.priceHuf) && !isNaN(t.priceEur)).sort((a, b) => a.minQty - b.minQty);
 
         if (!tiers.length) {
-          errorEl.textContent = `Adj meg legalább egy érvényes sávot ehhez: ${type}`;
+          errorEl.textContent = `Adj meg legalább egy érvényes sávot (HUF és EUR árral) ehhez: ${type}`;
           errorEl.classList.remove("hidden");
           return;
         }

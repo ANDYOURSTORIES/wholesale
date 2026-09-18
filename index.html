@@ -380,7 +380,10 @@
     const rule = (category.prices || {})[product.productType];
     if (!rule) return null; // ebben a kategóriában nincs ár megadva erre a típusra
 
-    if (rule.type === "fixed") return rule.fixedPrice;
+    const priceField = currentRetailer.data.currency === "EUR" ? "priceEur" : "priceHuf";
+    const fixedField = currentRetailer.data.currency === "EUR" ? "fixedPriceEur" : "fixedPriceHuf";
+
+    if (rule.type === "fixed") return rule[fixedField];
 
     const tiers = rule.tiers || [];
     if (!tiers.length) return null;
@@ -388,7 +391,7 @@
     for (const t of tiers) {
       if (qty >= t.minQty) applicable = t;
     }
-    return applicable.price;
+    return applicable[priceField];
   }
 
   // A retailer mindig a saját, regisztrációkor megadott pénznemében látja az árakat, konverzió nélkül
