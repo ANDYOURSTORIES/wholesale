@@ -60,6 +60,7 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const NOTIFY_FUNCTION_URL = "https://wholesale-notify-registration-642343737324.europe-west1.run.app";
 
   document.getElementById("submit-btn").addEventListener("click", async () => {
     const companyName = document.getElementById("f-companyName").value.trim();
@@ -81,7 +82,7 @@
     }
 
     try {
-      await addDoc(collection(db, "retailers"), {
+      const docRef = await addDoc(collection(db, "retailers"), {
         companyName, taxNumber, address, postCode, city, countryCode, contactName, email, phone, currency,
         status: "pending",
         customPricing: {},
@@ -89,6 +90,12 @@
       });
       document.getElementById("form-screen").classList.add("hidden");
       document.getElementById("success-screen").classList.remove("hidden");
+
+      fetch(NOTIFY_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retailerId: docRef.id }),
+      }).catch((err) => console.error("Admin-értesítés nem sikerült:", err));
     } catch (err) {
       errorEl.textContent = `Hiba történt: ${err.code || err.message}`;
       errorEl.classList.remove("hidden");
