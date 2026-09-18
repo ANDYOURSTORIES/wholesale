@@ -8,49 +8,55 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
 
+<!-- Nyelv váltó, mindig látható -->
+<div class="fixed top-3 right-3 z-40 bg-white border border-gray-200 rounded-full shadow-sm flex text-xs overflow-hidden">
+  <button id="lang-hu-btn" class="px-3 py-1.5 font-medium">HU</button>
+  <button id="lang-en-btn" class="px-3 py-1.5 font-medium text-gray-400">EN</button>
+</div>
+
 <!-- Belépő képernyő: bejelentkezés / regisztráció váltó -->
 <div id="entry-screen" class="flex items-center justify-center min-h-screen py-10 px-4">
   <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-md">
     <h1 class="text-lg font-semibold mb-1">ANDYOURSTORIES Wholesale</h1>
 
     <div class="flex gap-1 mt-4 mb-5 border-b border-gray-200">
-      <button id="mode-login-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-gray-900">Bejelentkezés</button>
-      <button id="mode-register-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">Regisztráció</button>
+      <button id="mode-login-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-gray-900" data-i18n="tabLogin">Bejelentkezés</button>
+      <button id="mode-register-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500" data-i18n="tabRegister">Regisztráció</button>
     </div>
 
     <!-- Bejelentkezés form -->
     <div id="login-form">
       <div class="space-y-3">
-        <input id="login-email" type="email" placeholder="Email" class="w-full border rounded px-3 py-2 text-sm">
-        <input id="login-password" type="password" placeholder="Jelszó" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="login-email" type="email" data-i18n-placeholder="loginEmailPlaceholder" placeholder="Email" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="login-password" type="password" data-i18n-placeholder="loginPasswordPlaceholder" placeholder="Jelszó" class="w-full border rounded px-3 py-2 text-sm">
       </div>
-      <button id="login-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium mt-4">Belépés</button>
+      <button id="login-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium mt-4" data-i18n="loginBtn">Belépés</button>
       <p id="login-error" class="text-red-600 text-xs mt-2 hidden"></p>
-      <p class="text-xs text-gray-400 mt-3">Még nincs fiókod? Válts a "Regisztráció" fülre.</p>
+      <p class="text-xs text-gray-400 mt-3" data-i18n="noAccountHint">Még nincs fiókod? Válts a "Regisztráció" fülre.</p>
     </div>
 
     <!-- Regisztráció form -->
     <div id="register-form" class="hidden">
       <div class="space-y-3">
-        <input id="f-companyName" type="text" placeholder="Cégnév *" class="w-full border rounded px-3 py-2 text-sm">
-        <input id="f-taxNumber" type="text" placeholder="Adószám / EU VAT szám *" class="w-full border rounded px-3 py-2 text-sm">
-        <input id="f-address" type="text" placeholder="Cím (utca, házszám) *" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-companyName" type="text" data-i18n-placeholder="regCompanyPlaceholder" placeholder="Cégnév *" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-taxNumber" type="text" data-i18n-placeholder="regTaxNumberPlaceholder" placeholder="Adószám / EU VAT szám *" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-address" type="text" data-i18n-placeholder="regAddressPlaceholder" placeholder="Cím (utca, házszám) *" class="w-full border rounded px-3 py-2 text-sm">
         <div class="flex gap-2">
-          <input id="f-postcode" type="text" placeholder="Irányítószám *" class="w-1/3 border rounded px-3 py-2 text-sm">
-          <input id="f-city" type="text" placeholder="Város *" class="flex-1 border rounded px-3 py-2 text-sm">
+          <input id="f-postcode" type="text" data-i18n-placeholder="regPostcodePlaceholder" placeholder="Irányítószám *" class="w-1/3 border rounded px-3 py-2 text-sm">
+          <input id="f-city" type="text" data-i18n-placeholder="regCityPlaceholder" placeholder="Város *" class="flex-1 border rounded px-3 py-2 text-sm">
         </div>
-        <input id="f-country" type="text" placeholder="Országkód (pl. HU, SK, DE) *" maxlength="2" class="w-full border rounded px-3 py-2 text-sm">
-        <input id="f-contactName" type="text" placeholder="Kapcsolattartó neve *" class="w-full border rounded px-3 py-2 text-sm">
-        <input id="f-email" type="email" placeholder="Email *" class="w-full border rounded px-3 py-2 text-sm">
-        <input id="f-phone" type="tel" placeholder="Telefonszám" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-country" type="text" data-i18n-placeholder="regCountryPlaceholder" placeholder="Országkód (pl. HU, SK, DE) *" maxlength="2" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-contactName" type="text" data-i18n-placeholder="regContactPlaceholder" placeholder="Kapcsolattartó neve *" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-email" type="email" data-i18n-placeholder="regEmailPlaceholder" placeholder="Email *" class="w-full border rounded px-3 py-2 text-sm">
+        <input id="f-phone" type="tel" data-i18n-placeholder="regPhonePlaceholder" placeholder="Telefonszám" class="w-full border rounded px-3 py-2 text-sm">
         <select id="f-currency" class="w-full border rounded px-3 py-2 text-sm">
-          <option value="HUF">Számlázás pénzneme: HUF</option>
-          <option value="EUR">Számlázás pénzneme: EUR</option>
+          <option value="HUF" data-i18n="currencyOptionHUF">Számlázás pénzneme: HUF</option>
+          <option value="EUR" data-i18n="currencyOptionEUR">Számlázás pénzneme: EUR</option>
         </select>
       </div>
-      <button id="submit-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium mt-4">Regisztráció elküldése</button>
+      <button id="submit-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium mt-4" data-i18n="regSubmitBtn">Regisztráció elküldése</button>
       <p id="form-error" class="text-red-600 text-xs mt-2 hidden"></p>
-      <p class="text-xs text-gray-400 mt-3">A regisztrációt manuálisan hagyjuk jóvá, ezután emailben kapsz hozzáférést.</p>
+      <p class="text-xs text-gray-400 mt-3" data-i18n="regFooterHint">A regisztrációt manuálisan hagyjuk jóvá, ezután emailben kapsz hozzáférést.</p>
     </div>
   </div>
 </div>
@@ -58,20 +64,25 @@
 <!-- Sikeres regisztráció -->
 <div id="success-screen" class="hidden flex items-center justify-center min-h-screen px-4">
   <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-md text-center">
-    <h1 class="text-lg font-semibold mb-2">Köszönjük!</h1>
-    <p class="text-sm text-gray-600">A regisztrációdat megkaptuk, hamarosan átnézzük. Jóváhagyás után emailben küldünk egy linket a jelszó beállításához.</p>
+    <h1 class="text-lg font-semibold mb-2" data-i18n="successTitle">Köszönjük!</h1>
+    <p class="text-sm text-gray-600" data-i18n="successBody">A regisztrációdat megkaptuk, hamarosan átnézzük. Jóváhagyás után emailben küldünk egy linket a jelszó beállításához.</p>
   </div>
 </div>
 
 <!-- Bejelentkezve: termékkatalógus + kosár -->
 <div id="dashboard-screen" class="hidden max-w-3xl mx-auto px-4 py-6 pb-28">
-  <div class="flex items-center justify-between mb-1">
-    <h1 class="text-lg font-semibold">Üdv, <span id="dashboard-company"></span>!</h1>
-    <button id="dashboard-logout-btn" class="text-sm text-gray-500">Kilépés</button>
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+    <h1 class="text-lg font-semibold"><span data-i18n="welcome">Üdv, </span><span id="dashboard-company"></span>!</h1>
+    <div class="flex items-center gap-3">
+      <div class="flex text-xs border border-gray-300 rounded-full overflow-hidden">
+        <button id="currency-huf-btn" class="px-3 py-1.5 font-medium">HUF</button>
+        <button id="currency-eur-btn" class="px-3 py-1.5 font-medium text-gray-400">EUR</button>
+      </div>
+      <button id="dashboard-logout-btn" class="text-sm text-gray-500" data-i18n="logoutBtn">Kilépés</button>
+    </div>
   </div>
-  <p class="text-xs text-gray-400 mb-4">Az árak a te egyedi kondícióidat tükrözik, mennyiségtől függően.</p>
 
-  <input id="catalog-search" type="text" placeholder="Keresés termék vagy SKU alapján..."
+  <input id="catalog-search" type="text" data-i18n-placeholder="searchPlaceholder" placeholder="Keresés termék vagy SKU alapján..."
          class="w-full border rounded px-3 py-2 text-sm mb-4">
 
   <div id="catalog-list" class="space-y-2"></div>
@@ -83,10 +94,10 @@
 <div id="cart-bar" class="hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3">
   <div class="max-w-3xl mx-auto flex items-center justify-between">
     <div class="text-sm">
-      <span class="text-gray-400">Összesen:</span>
+      <span class="text-gray-400" data-i18n="cartTotalLabel">Összesen:</span>
       <span id="cart-total" class="font-semibold"></span>
     </div>
-    <button id="submit-order-btn" class="bg-gray-900 text-white rounded px-4 py-2 text-sm font-medium">Rendelés leadása</button>
+    <button id="submit-order-btn" class="bg-gray-900 text-white rounded px-4 py-2 text-sm font-medium" data-i18n="submitOrderBtn">Rendelés leadása</button>
   </div>
   <p id="cart-error" class="max-w-3xl mx-auto text-red-600 text-xs mt-1 hidden"></p>
 </div>
@@ -94,9 +105,9 @@
 <!-- Rendelés visszaigazolás -->
 <div id="order-success-screen" class="hidden flex items-center justify-center min-h-screen px-4">
   <div class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 w-full max-w-md text-center">
-    <h1 class="text-lg font-semibold mb-2">Köszönjük a rendelést!</h1>
-    <p class="text-sm text-gray-600 mb-5">Megkaptuk a rendelésedet, hamarosan jóváhagyjuk és kiküldjük a díjbekérőt.</p>
-    <button id="order-success-back-btn" class="text-sm text-gray-500 underline">Vissza a katalógushoz</button>
+    <h1 class="text-lg font-semibold mb-2" data-i18n="orderSuccessTitle">Köszönjük a rendelést!</h1>
+    <p class="text-sm text-gray-600 mb-5" data-i18n="orderSuccessBody">Megkaptuk a rendelésedet, hamarosan jóváhagyjuk és kiküldjük a díjbekérőt.</p>
+    <button id="order-success-back-btn" class="text-sm text-gray-500 underline" data-i18n="backToCatalog">Vissza a katalógushoz</button>
   </div>
 </div>
 
@@ -122,6 +133,133 @@
   const auth = getAuth(app);
   const NOTIFY_FUNCTION_URL = "https://wholesale-notify-registration-642343737324.europe-west1.run.app";
   const db = getFirestore(app);
+
+  // ============== FORDÍTÁS (i18n) ==============
+  const TRANSLATIONS = {
+    hu: {
+      tabLogin: "Bejelentkezés",
+      tabRegister: "Regisztráció",
+      loginEmailPlaceholder: "Email",
+      loginPasswordPlaceholder: "Jelszó",
+      loginBtn: "Belépés",
+      noAccountHint: 'Még nincs fiókod? Válts a "Regisztráció" fülre.',
+      regCompanyPlaceholder: "Cégnév *",
+      regTaxNumberPlaceholder: "Adószám / EU VAT szám *",
+      regAddressPlaceholder: "Cím (utca, házszám) *",
+      regPostcodePlaceholder: "Irányítószám *",
+      regCityPlaceholder: "Város *",
+      regCountryPlaceholder: "Országkód (pl. HU, SK, DE) *",
+      regContactPlaceholder: "Kapcsolattartó neve *",
+      regEmailPlaceholder: "Email *",
+      regPhonePlaceholder: "Telefonszám",
+      currencyOptionHUF: "Számlázás pénzneme: HUF",
+      currencyOptionEUR: "Számlázás pénzneme: EUR",
+      regSubmitBtn: "Regisztráció elküldése",
+      regFooterHint: "A regisztrációt manuálisan hagyjuk jóvá, ezután emailben kapsz hozzáférést.",
+      fillAllFields: "Kérjük, tölts ki minden csillaggal jelölt mezőt.",
+      errorPrefix: "Hiba: ",
+      errorOccurred: "Hiba történt: ",
+      successTitle: "Köszönjük!",
+      successBody: "A regisztrációdat megkaptuk, hamarosan átnézzük. Jóváhagyás után emailben küldünk egy linket a jelszó beállításához.",
+      welcome: "Üdv, ",
+      logoutBtn: "Kilépés",
+      searchPlaceholder: "Keresés termék vagy SKU alapján...",
+      soldOut: "Elfogyott",
+      priceUnderNegotiation: "Ár egyeztetés alatt",
+      minimumLabel: "Minimum",
+      unitPcs: "db",
+      stockLimitedNote: (stock, moq) => `Jelenleg csak ${stock} db rendelhető (készlet miatt, eredeti minimum: ${moq} db)`,
+      cartTotalLabel: "Összesen:",
+      submitOrderBtn: "Rendelés leadása",
+      orderErrorPrefix: "Hiba a rendelés leadása során: ",
+      orderSuccessTitle: "Köszönjük a rendelést!",
+      orderSuccessBody: "Megkaptuk a rendelésedet, hamarosan jóváhagyjuk és kiküldjük a díjbekérőt.",
+      backToCatalog: "Vissza a katalógushoz",
+      loginErrorGeneric: "Hibás email vagy jelszó, vagy még nincs jóváhagyott fiókod.",
+      transientErrorMsg: "Átmeneti hiba történt, kérjük tölts újra az oldalt.",
+    },
+    en: {
+      tabLogin: "Login",
+      tabRegister: "Register",
+      loginEmailPlaceholder: "Email",
+      loginPasswordPlaceholder: "Password",
+      loginBtn: "Log in",
+      noAccountHint: 'Don\'t have an account yet? Switch to the "Register" tab.',
+      regCompanyPlaceholder: "Company name *",
+      regTaxNumberPlaceholder: "Tax number / EU VAT number *",
+      regAddressPlaceholder: "Address (street, number) *",
+      regPostcodePlaceholder: "Postal code *",
+      regCityPlaceholder: "City *",
+      regCountryPlaceholder: "Country code (e.g. HU, SK, DE) *",
+      regContactPlaceholder: "Contact person's name *",
+      regEmailPlaceholder: "Email *",
+      regPhonePlaceholder: "Phone number",
+      currencyOptionHUF: "Billing currency: HUF",
+      currencyOptionEUR: "Billing currency: EUR",
+      regSubmitBtn: "Submit registration",
+      regFooterHint: "We approve registrations manually — you'll receive access by email once approved.",
+      fillAllFields: "Please fill in all fields marked with an asterisk.",
+      errorPrefix: "Error: ",
+      errorOccurred: "An error occurred: ",
+      successTitle: "Thank you!",
+      successBody: "We've received your registration and will review it shortly. Once approved, we'll email you a link to set your password.",
+      welcome: "Welcome, ",
+      logoutBtn: "Log out",
+      searchPlaceholder: "Search by product or SKU...",
+      soldOut: "Sold out",
+      priceUnderNegotiation: "Price under negotiation",
+      minimumLabel: "Minimum",
+      unitPcs: "pcs",
+      stockLimitedNote: (stock, moq) => `Only ${stock} pcs currently available (due to stock — original minimum: ${moq} pcs)`,
+      cartTotalLabel: "Total:",
+      submitOrderBtn: "Place order",
+      orderErrorPrefix: "Error placing the order: ",
+      orderSuccessTitle: "Thank you for your order!",
+      orderSuccessBody: "We've received your order — we'll approve it shortly and send the proforma invoice.",
+      backToCatalog: "Back to catalog",
+      loginErrorGeneric: "Wrong email or password, or your account hasn't been approved yet.",
+      transientErrorMsg: "A temporary error occurred, please refresh the page.",
+    },
+  };
+
+  let lang = localStorage.getItem("wsLang") || "hu";
+
+  function t(key) {
+    return TRANSLATIONS[lang][key];
+  }
+
+  function applyTranslations() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const val = TRANSLATIONS[lang][el.dataset.i18n];
+      if (typeof val === "string") el.textContent = val;
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      const val = TRANSLATIONS[lang][el.dataset.i18nPlaceholder];
+      if (typeof val === "string") el.placeholder = val;
+    });
+    document.getElementById("lang-hu-btn").classList.toggle("text-gray-400", lang !== "hu");
+    document.getElementById("lang-hu-btn").classList.toggle("font-semibold", lang === "hu");
+    document.getElementById("lang-en-btn").classList.toggle("text-gray-400", lang !== "en");
+    document.getElementById("lang-en-btn").classList.toggle("font-semibold", lang === "en");
+
+    // Dinamikusan generált katalógus-tartalom újrarajzolása, ha épp látszik
+    if (currentRetailer && !dashboardScreen.classList.contains("hidden")) {
+      rerenderFilteredCatalog();
+      updateCartBar();
+    }
+  }
+
+  document.getElementById("lang-hu-btn").addEventListener("click", () => {
+    lang = "hu";
+    localStorage.setItem("wsLang", lang);
+    applyTranslations();
+  });
+  document.getElementById("lang-en-btn").addEventListener("click", () => {
+    lang = "en";
+    localStorage.setItem("wsLang", lang);
+    applyTranslations();
+  });
 
   const entryScreen = document.getElementById("entry-screen");
   const successScreen = document.getElementById("success-screen");
@@ -158,9 +296,9 @@
       await signInWithEmailAndPassword(auth, email, password);
       // onAuthStateChanged veszi át innentől
     } catch (err) {
-      let msg = `Hiba: ${err.code || err.message}`;
+      let msg = `${t("errorPrefix")}${err.code || err.message}`;
       if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
-        msg = "Hibás email vagy jelszó, vagy még nincs jóváhagyott fiókod.";
+        msg = t("loginErrorGeneric");
       }
       errorEl.textContent = msg;
       errorEl.classList.remove("hidden");
@@ -168,6 +306,50 @@
   });
 
   document.getElementById("dashboard-logout-btn").addEventListener("click", () => signOut(auth));
+
+  // --- Pénznem-váltó ---
+  let displayCurrency = "HUF";
+  let hufToEurRate = null; // 1 HUF hány EUR
+
+  async function loadExchangeRate() {
+    try {
+      const res = await fetch("https://api.frankfurter.app/latest?from=HUF&to=EUR");
+      const data = await res.json();
+      hufToEurRate = data.rates.EUR;
+    } catch (err) {
+      console.error("Nem sikerült lekérni az árfolyamot:", err);
+    }
+  }
+
+  function roundUpToHalf(value) {
+    return Math.ceil(value * 2) / 2;
+  }
+
+  // A tárolt/számlázott alapár (a retailer saját pénzneme) átváltása a kiválasztott megjelenítési pénznemre
+  function convertForDisplay(amount) {
+    const base = currentRetailer.data.currency;
+    if (displayCurrency === base || !hufToEurRate) return { amount, currency: base };
+    if (base === "HUF" && displayCurrency === "EUR") {
+      return { amount: roundUpToHalf(amount * hufToEurRate), currency: "EUR" };
+    }
+    if (base === "EUR" && displayCurrency === "HUF") {
+      return { amount: Math.ceil(amount / hufToEurRate), currency: "HUF" };
+    }
+    return { amount, currency: base };
+  }
+
+  function setDisplayCurrency(cur) {
+    displayCurrency = cur;
+    document.getElementById("currency-huf-btn").classList.toggle("text-gray-400", cur !== "HUF");
+    document.getElementById("currency-huf-btn").classList.toggle("font-semibold", cur === "HUF");
+    document.getElementById("currency-eur-btn").classList.toggle("text-gray-400", cur !== "EUR");
+    document.getElementById("currency-eur-btn").classList.toggle("font-semibold", cur === "EUR");
+    rerenderFilteredCatalog();
+    updateCartBar();
+  }
+
+  document.getElementById("currency-huf-btn").addEventListener("click", () => setDisplayCurrency("HUF"));
+  document.getElementById("currency-eur-btn").addEventListener("click", () => setDisplayCurrency("EUR"));
 
   // --- Bejelentkezési állapot figyelése ---
   let currentRetailer = null; // { uid, data }
@@ -189,6 +371,8 @@
         successScreen.classList.add("hidden");
         orderSuccessScreen.classList.add("hidden");
         dashboardScreen.classList.remove("hidden");
+        setDisplayCurrency(currentRetailer.data.currency || "HUF");
+        loadExchangeRate();
         loadCatalog();
       } else if (retailerDoc.exists()) {
         // A dokumentum létezik, de nem approved (pl. rejected) — ez valódi jogosultsági ok, kiléptetjük
@@ -200,7 +384,8 @@
       // Átmeneti hiba (hálózat, permission-denied villanás) — NE léptessük ki automatikusan,
       // csak jelezzük, hogy próbálja újratölteni az oldalt.
       console.error("Retailer adat lekérési hiba:", err);
-      loginError.textContent = "Átmeneti hiba történt, kérjük tölts újra az oldalt.";
+      const loginError = document.getElementById("login-error");
+      loginError.textContent = t("transientErrorMsg");
       loginError.classList.remove("hidden");
     }
   });
@@ -258,8 +443,12 @@
     return applicable.price;
   }
 
-  function formatPrice(amount) {
-    return `${amount.toLocaleString("hu-HU")} ${currentRetailer.data.currency}`;
+  // Csak megjelenítésre — a ténylegesen számlázott ár mindig a retailer alap-pénznemében, változatlanul kerül mentésre
+  function formatPrice(baseAmount) {
+    const { amount, currency } = convertForDisplay(baseAmount);
+    const decimals = currency === "EUR" ? 2 : 0;
+    const localeStr = lang === "hu" ? "hu-HU" : "en-US";
+    return `${amount.toLocaleString(localeStr, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${currency}`;
   }
 
   function renderCatalog(products) {
@@ -280,12 +469,12 @@
       row.className = "flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3";
 
       const priceLine = unitPrice != null
-        ? `${formatPrice(unitPrice)}${product.retailPrice ? ` <span class="text-gray-400 line-through ml-1">${product.retailPrice} Ft bolti</span>` : ""}`
-        : `<span class="text-gray-400">Ár egyeztetés alatt</span>`;
+        ? formatPrice(unitPrice)
+        : `<span class="text-gray-400">${t("priceUnderNegotiation")}</span>`;
 
       const moqLine = stockLimited
-        ? `Jelenleg csak ${stock} db rendelhető (készlet miatt, eredeti minimum: ${moq} db)`
-        : `Minimum: ${moq} db`;
+        ? TRANSLATIONS[lang].stockLimitedNote(stock, moq)
+        : `${t("minimumLabel")}: ${moq} ${t("unitPcs")}`;
 
       row.innerHTML = `
         <img src="${product.imageUrl || ''}" onerror="this.style.visibility='hidden'"
@@ -297,7 +486,7 @@
         </div>
         <div class="shrink-0">
           ${soldOut
-            ? `<span class="text-xs text-red-500">Elfogyott</span>`
+            ? `<span class="text-xs text-red-500">${t("soldOut")}</span>`
             : `
               <div class="flex items-center gap-2">
                 <button class="qty-minus w-7 h-7 border rounded text-sm">−</button>
@@ -350,6 +539,7 @@
     const errorEl = document.getElementById("cart-error");
     errorEl.classList.add("hidden");
 
+    // A rendelés mindig a retailer szerződött alap-pénznemében és valós árain megy be, a megjelenítési pénznemtől függetlenül
     const items = Object.keys(cart).map((sku) => {
       const product = allProducts.find(p => p.sku === sku);
       const qty = cart[sku];
@@ -377,7 +567,7 @@
       dashboardScreen.classList.add("hidden");
       orderSuccessScreen.classList.remove("hidden");
     } catch (err) {
-      errorEl.textContent = `Hiba a rendelés leadása során: ${err.code || err.message}`;
+      errorEl.textContent = `${t("orderErrorPrefix")}${err.code || err.message}`;
       errorEl.classList.remove("hidden");
       console.error(err);
     }
@@ -404,7 +594,7 @@
 
     const errorEl = document.getElementById("form-error");
     if (!companyName || !taxNumber || !address || !postCode || !city || !countryCode || !contactName || !email) {
-      errorEl.textContent = "Kérjük, tölts ki minden csillaggal jelölt mezőt.";
+      errorEl.textContent = t("fillAllFields");
       errorEl.classList.remove("hidden");
       return;
     }
@@ -426,11 +616,14 @@
         body: JSON.stringify({ retailerId: docRef.id }),
       }).catch((err) => console.error("Admin-értesítés nem sikerült:", err));
     } catch (err) {
-      errorEl.textContent = `Hiba történt: ${err.code || err.message}`;
+      errorEl.textContent = `${t("errorOccurred")}${err.code || err.message}`;
       errorEl.classList.remove("hidden");
       console.error(err);
     }
   });
+
+  // Kezdeti fordítás alkalmazása betöltéskor
+  applyTranslations();
 </script>
 
 </body>
