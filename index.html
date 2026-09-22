@@ -126,6 +126,7 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const NOTIFY_FUNCTION_URL = "https://wholesale-notify-registration-642343737324.europe-west1.run.app";
+  const ORDER_NOTIFY_FUNCTION_URL = "https://wholesale-notify-order-642343737324.europe-west1.run.app";
   const db = getFirestore(app);
 
   // ============== FORDÍTÁS (i18n) ==============
@@ -503,7 +504,7 @@
     const total = items.reduce((sum, i) => sum + i.lineTotal, 0);
 
     try {
-      await addDoc(collection(db, "orders"), {
+      const orderRef = await addDoc(collection(db, "orders"), {
         retailerId: currentRetailer.uid,
         retailerCompany: currentRetailer.data.companyName,
         currency: currentRetailer.data.currency,
@@ -517,6 +518,13 @@
       cartBar.classList.add("hidden");
       dashboardScreen.classList.add("hidden");
       orderSuccessScreen.classList.remove("hidden");
+
+      // Admin-értesítés kiküldése — best effort, a rendelés sikerét ez nem befolyásolja
+      fetch(ORDER_NOTIFY_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: orderRef.id }),
+      }).catch((err) => console.error("Admin-értesítés nem sikerült:", err));
     } catch (err) {
       errorEl.textContent = `${t("orderErrorPrefix")}${err.code || err.message}`;
       errorEl.classList.remove("hidden");
