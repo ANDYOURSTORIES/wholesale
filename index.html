@@ -86,12 +86,25 @@
 
 <!-- Kosár összesítő, alul rögzítve -->
 <div id="cart-bar" class="hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3">
-  <div class="max-w-3xl mx-auto flex items-center justify-between">
-    <div class="text-sm">
-      <span class="text-gray-400" data-i18n="cartTotalLabel">Összesen:</span>
-      <span id="cart-total" class="font-semibold"></span>
+  <div class="max-w-3xl mx-auto">
+    <div class="flex items-center gap-4 mb-2 text-sm">
+      <label class="flex items-center gap-1.5">
+        <input type="radio" name="shipping-method" id="shipping-method-ship" value="shipping" checked>
+        <span data-i18n="shippingMethodShip">Szállítás</span>
+      </label>
+      <label class="flex items-center gap-1.5">
+        <input type="radio" name="shipping-method" id="shipping-method-pickup" value="pickup">
+        <span data-i18n="shippingMethodPickup">Személyes átvétel (ingyenes)</span>
+      </label>
     </div>
-    <button id="submit-order-btn" class="bg-gray-900 text-white rounded px-4 py-2 text-sm font-medium" data-i18n="submitOrderBtn">Rendelés leadása</button>
+    <div id="shipping-cost-line" class="text-xs text-gray-500 mb-2"></div>
+    <div class="flex items-center justify-between">
+      <div class="text-sm">
+        <span class="text-gray-400" data-i18n="cartTotalLabel">Összesen:</span>
+        <span id="cart-total" class="font-semibold"></span>
+      </div>
+      <button id="submit-order-btn" class="bg-gray-900 text-white rounded px-4 py-2 text-sm font-medium" data-i18n="submitOrderBtn">Rendelés leadása</button>
+    </div>
   </div>
   <p id="cart-error" class="max-w-3xl mx-auto text-red-600 text-xs mt-1 hidden"></p>
 </div>
@@ -172,6 +185,10 @@
       backToCatalog: "Vissza a katalógushoz",
       loginErrorGeneric: "Hibás email vagy jelszó, vagy még nincs jóváhagyott fiókod.",
       transientErrorMsg: "Átmeneti hiba történt, kérjük tölts újra az oldalt.",
+      shippingMethodShip: "Szállítás",
+      shippingMethodPickup: "Személyes átvétel (ingyenes)",
+      shippingCostLine: (weight, cost, currency) => `Becsült csomagsúly: ${weight} kg — szállítási díj: ${cost.toLocaleString("hu-HU")} ${currency}`,
+      shippingCustomQuote: (weight) => `Becsült csomagsúly: ${weight} kg — ennyi fölött egyedi ajánlatot kérünk, a végösszeg majd ez alapján pontosodik`,
     },
     en: {
       tabLogin: "Login",
@@ -214,6 +231,10 @@
       backToCatalog: "Back to catalog",
       loginErrorGeneric: "Wrong email or password, or your account hasn't been approved yet.",
       transientErrorMsg: "A temporary error occurred, please refresh the page.",
+      shippingMethodShip: "Shipping",
+      shippingMethodPickup: "Personal pickup (free)",
+      shippingCostLine: (weight, cost, currency) => `Estimated package weight: ${weight} kg — shipping cost: ${cost.toLocaleString("en-US")} ${currency}`,
+      shippingCustomQuote: (weight) => `Estimated package weight: ${weight} kg — above this we provide a custom quote, the final total will be adjusted accordingly`,
     },
   };
 
@@ -344,12 +365,14 @@
   const cartBar = document.getElementById("cart-bar");
   let allProducts = [];
   let categoriesMap = {}; // categoryId -> { productLine, type, tiers, fixedPrice }
+  let shippingSettings = null; // { weightsByType, domesticTiers, eurMultiplier, eurRate }
   const cart = {}; // sku -> qty
 
   async function loadCatalog() {
-    const [productsSnap, categoriesSnap] = await Promise.all([
+    const [productsSnap, categoriesSnap, shippingSnap] = await Promise.all([
       getDocs(query(collection(db, "wholesaleProducts"), where("visible", "==", true))),
       getDocs(collection(db, "priceCategories")),
+      getDoc(doc(db, "settings", "shipping")),
     ]);
 
     allProducts = [];
@@ -358,6 +381,8 @@
 
     categoriesMap = {};
     categoriesSnap.forEach((docSnap) => { categoriesMap[docSnap.id] = docSnap.data(); });
+
+    shippingSettings = shippingSnap.exists() ? shippingSnap.data() : null;
 
     renderCatalog(allProducts);
   }
@@ -470,20 +495,77 @@
     });
   }
 
+  // Kosárban lévő tételek összsúlya kg-ban, típusonkénti súly alapján (alapértelmezett 0,25 kg, ha nincs megadva)
+  function calcCartWeight() {
+    let weight = 0;
+    Object.keys(cart).forEach((sku) => {
+      const product = allProducts.find(p => p.sku === sku);
+      const qty = cart[sku];
+      const perUnitKg = (shippingSettings?.weightsByType || {})[product?.productType] ?? 0.25;
+      weight += perUnitKg * qty;
+    });
+    return weight;
+  }
+
+  // Szállítási díj a súly + a retailer pénzneme (HUF = belföld, EUR = külföld) alapján.
+  // Visszaad { cost: szám } vagy { cost: null } ha a legmagasabb sávot is meghaladja (egyedi ajánlat kell).
+  function calcShippingCost(weightKg) {
+    if (!shippingSettings || !shippingSettings.domesticTiers?.length) return { cost: 0 };
+
+    const tiers = shippingSettings.domesticTiers;
+    const topTier = tiers[tiers.length - 1];
+    if (weightKg > topTier.maxWeight) return { cost: null };
+
+    const tier = tiers.find(t => weightKg <= t.maxWeight) || topTier;
+    const hufPrice = tier.price;
+
+    if (currentRetailer.data.currency === "EUR") {
+      const multiplier = shippingSettings.eurMultiplier || 3;
+      const rate = shippingSettings.eurRate || 362;
+      return { cost: Math.round((hufPrice * multiplier / rate) * 100) / 100 };
+    }
+    return { cost: hufPrice };
+  }
+
+  function getSelectedShippingMethod() {
+    return document.querySelector('input[name="shipping-method"]:checked').value;
+  }
+
+  document.getElementById("shipping-method-ship").addEventListener("change", updateCartBar);
+  document.getElementById("shipping-method-pickup").addEventListener("change", updateCartBar);
+
   function updateCartBar() {
     const skus = Object.keys(cart);
     if (skus.length === 0) {
       cartBar.classList.add("hidden");
       return;
     }
-    let total = 0;
+    let itemsTotal = 0;
     skus.forEach((sku) => {
       const product = allProducts.find(p => p.sku === sku);
       const qty = cart[sku];
       const unitPrice = getUnitPrice(product, qty) || 0;
-      total += unitPrice * qty;
+      itemsTotal += unitPrice * qty;
     });
-    document.getElementById("cart-total").textContent = formatPrice(total);
+
+    const method = getSelectedShippingMethod();
+    const costLineEl = document.getElementById("shipping-cost-line");
+    let grandTotal = itemsTotal;
+
+    if (method === "pickup") {
+      costLineEl.textContent = "";
+    } else {
+      const weight = Math.round(calcCartWeight() * 100) / 100;
+      const { cost } = calcShippingCost(weight);
+      if (cost == null) {
+        costLineEl.textContent = TRANSLATIONS[lang].shippingCustomQuote(weight);
+      } else {
+        costLineEl.textContent = TRANSLATIONS[lang].shippingCostLine(weight, cost, currentRetailer.data.currency);
+        grandTotal += cost;
+      }
+    }
+
+    document.getElementById("cart-total").textContent = formatPrice(grandTotal);
     cartBar.classList.remove("hidden");
   }
 
@@ -501,7 +583,16 @@
 
     if (!items.length) return;
 
-    const total = items.reduce((sum, i) => sum + i.lineTotal, 0);
+    const itemsTotal = items.reduce((sum, i) => sum + i.lineTotal, 0);
+
+    const shippingMethod = getSelectedShippingMethod();
+    let shippingWeightKg = null;
+    let shippingCost = null;
+    if (shippingMethod === "shipping") {
+      shippingWeightKg = Math.round(calcCartWeight() * 100) / 100;
+      shippingCost = calcShippingCost(shippingWeightKg).cost; // null = egyedi ajánlat szükséges
+    }
+    const total = itemsTotal + (shippingCost || 0);
 
     try {
       const orderRef = await addDoc(collection(db, "orders"), {
@@ -509,6 +600,10 @@
         retailerCompany: currentRetailer.data.companyName,
         currency: currentRetailer.data.currency,
         items,
+        itemsTotal,
+        shippingMethod,
+        shippingWeightKg,
+        shippingCost,
         total,
         status: "submitted",
         createdAt: serverTimestamp(),

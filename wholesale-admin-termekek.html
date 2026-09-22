@@ -36,6 +36,7 @@
       Rendelések <span id="pending-orders-badge" class="hidden bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-1"></span>
     </button>
     <button id="tab-email-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">Email sablon</button>
+    <button id="tab-shipping-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">Szállítás</button>
   </div>
 
   <!-- Termékek nézet -->
@@ -166,6 +167,36 @@
       <span id="email-template-status" class="text-xs text-gray-500"></span>
     </div>
   </div>
+
+  <!-- Szállítás nézet -->
+  <div id="tab-shipping" class="hidden max-w-2xl">
+    <h2 class="text-sm font-semibold text-gray-700 mb-2">Termék súlyok (kg / db)</h2>
+    <p class="text-xs text-gray-500 mb-3">Amit itt nem adsz meg egy típusra, azt a rendszer 0,25 kg-nak veszi.</p>
+    <div id="weight-rows" class="space-y-2 mb-2"></div>
+    <button id="weight-add-row" class="text-xs text-blue-600 mb-6">+ Súly hozzáadása</button>
+
+    <h2 class="text-sm font-semibold text-gray-700 mb-2">Belföldi díjsávok (HUF, nettó)</h2>
+    <p class="text-xs text-gray-500 mb-3">A legmagasabb sáv súlyhatára fölött a rendszer "Egyedi ajánlatkérés"-t mutat ár helyett.</p>
+    <div id="tier-rows" class="space-y-2 mb-2"></div>
+    <button id="tier-add-row" class="text-xs text-blue-600 mb-6">+ Sáv hozzáadása</button>
+
+    <h2 class="text-sm font-semibold text-gray-700 mb-2">Külföldi szorzó és árfolyam</h2>
+    <div class="flex items-center gap-4 mb-6">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Szorzó (belföldi HUF ár × ennyi)</label>
+        <input id="ship-eur-multiplier" type="number" min="1" step="0.1" class="w-24 border rounded px-2 py-1.5 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">HUF/EUR árfolyam (kézi, szállításhoz)</label>
+        <input id="ship-eur-rate" type="number" min="1" step="0.01" class="w-28 border rounded px-2 py-1.5 text-sm">
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button id="shipping-save" class="bg-gray-900 text-white rounded px-4 py-2 text-sm font-medium">Mentés</button>
+      <span id="shipping-save-status" class="text-xs text-gray-500"></span>
+    </div>
+  </div>
 </div>
 
 <!-- Árkategória szerkesztő modal -->
@@ -248,6 +279,7 @@
   const SYNC_FUNCTION_URL = "https://wholesale-shopify-sync-642343737324.europe-west1.run.app";
   const APPROVE_FUNCTION_URL = "https://wholesale-approve-retailer-642343737324.europe-west1.run.app";
   const INVOICE_FUNCTION_URL = "https://wholesale-create-invoice-642343737324.europe-west1.run.app";
+  const PICKUP_FUNCTION_URL = "https://wholesale-notify-pickup-642343737324.europe-west1.run.app";
 
   const loginScreen = document.getElementById("login-screen");
   const adminScreen = document.getElementById("admin-screen");
@@ -276,6 +308,7 @@
       listenToRetailers();
       listenToOrders();
       loadEmailTemplate();
+      loadShippingSettings();
     } else {
       if (user) signOut(auth);
       loginScreen.classList.remove("hidden");
@@ -290,6 +323,7 @@
     retailers: document.getElementById("tab-retailers-btn"),
     orders: document.getElementById("tab-orders-btn"),
     email: document.getElementById("tab-email-btn"),
+    shipping: document.getElementById("tab-shipping-btn"),
   };
   const tabPanels = {
     products: document.getElementById("tab-products"),
@@ -297,6 +331,7 @@
     retailers: document.getElementById("tab-retailers"),
     orders: document.getElementById("tab-orders"),
     email: document.getElementById("tab-email"),
+    shipping: document.getElementById("tab-shipping"),
   };
 
   function activateTab(tab) {
@@ -313,6 +348,7 @@
   tabButtons.retailers.addEventListener("click", () => activateTab("retailers"));
   tabButtons.orders.addEventListener("click", () => activateTab("orders"));
   tabButtons.email.addEventListener("click", () => activateTab("email"));
+  tabButtons.shipping.addEventListener("click", () => activateTab("shipping"));
 
   // --- Állapot ---
   let currentProducts = []; // [{sku, data}]
@@ -914,6 +950,19 @@
     ).join("");
   }
 
+  function orderShippingHtml(o) {
+    if (o.shippingMethod === "pickup") {
+      return `<div class="text-xs text-blue-600 mt-1">📦 Személyes átvétel${o.pickupInfo ? ` — bejelentve: ${o.pickupInfo}` : " — még nincs bejelentve"}</div>`;
+    }
+    if (o.shippingMethod === "shipping") {
+      const costText = typeof o.shippingCost === "number"
+        ? `${o.shippingCost.toLocaleString("hu-HU")} ${o.currency}`
+        : "egyedi ajánlat szükséges";
+      return `<div class="text-xs text-gray-500 mt-1">🚚 Szállítás — ${o.shippingWeightKg ?? "?"} kg — ${costText}</div>`;
+    }
+    return "";
+  }
+
   const STATUS_LABELS = {
     submitted: "Jóváhagyásra vár",
     approved: "Díjbekérő kiküldve",
@@ -953,6 +1002,7 @@
         <h1>Wholesale rendelés — ${o.retailerCompany || ""}</h1>
         <p>Dátum: ${formatOrderDate(o.createdAt)}</p>
         <p>Státusz: ${orderStatusLabel(o)}</p>
+        <p>${o.shippingMethod === "pickup" ? "📦 Személyes átvétel" : `🚚 Szállítás — ${o.shippingWeightKg ?? "?"} kg — ${typeof o.shippingCost === "number" ? `${o.shippingCost.toLocaleString("hu-HU")} ${o.currency}` : "egyedi ajánlat szükséges"}`}</p>
         <table>
           <thead><tr><th></th><th>SKU</th><th>Termék</th><th style="text-align:right;">Mennyiség</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -1002,6 +1052,7 @@
             </div>
           </div>
           <div class="border-t border-gray-100 pt-2 space-y-1">${orderItemsHtml(o.items)}</div>
+          ${orderShippingHtml(o)}
         `;
 
         card.querySelector(".order-pdf-btn").addEventListener("click", () => openOrderPdf(o));
@@ -1062,7 +1113,8 @@
             <button class="order-pdf-btn text-gray-600 hover:underline text-xs mr-3">PDF</button>
             ${o.billingoPublicUrl ? `<a href="${o.billingoPublicUrl}" target="_blank" class="text-purple-600 hover:underline text-xs mr-3">Megtekintés</a>` : ""}
             ${o.status === "approved" ? `<button class="order-paid-btn text-green-600 hover:underline text-xs mr-3">Fizetve</button>` : ""}
-            ${!o.fulfilled ? `<button class="order-fulfilled-btn text-blue-600 hover:underline text-xs">Teljesítve</button>` : ""}
+            ${!o.fulfilled ? `<button class="order-fulfilled-btn text-blue-600 hover:underline text-xs mr-3">Teljesítve</button>` : ""}
+            ${o.shippingMethod === "pickup" ? `<button class="order-pickup-btn text-purple-600 hover:underline text-xs">${o.pickupInfo ? "Átvétel újraírása" : "Átvétel bejelentése"}</button>` : ""}
           </td>
         `;
 
@@ -1074,10 +1126,33 @@
           });
         }
 
+        if (o.shippingMethod === "pickup") {
+          tr.querySelector(".order-pickup-btn").addEventListener("click", async (e) => {
+            const pickupInfo = prompt("Mikor/hol vehető át a rendelés? (ez a szöveg megy ki emailben)", o.pickupInfo || "");
+            if (!pickupInfo) return;
+            e.target.disabled = true;
+            try {
+              const idToken = await auth.currentUser.getIdToken();
+              const res = await fetch(PICKUP_FUNCTION_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                body: JSON.stringify({ orderId: docSnap.id, pickupInfo }),
+              });
+              const text = await res.text();
+              if (!res.ok) throw new Error(text);
+            } catch (err) {
+              alert(`Hiba az értesítés küldése során: ${err.message}`);
+            } finally {
+              e.target.disabled = false;
+            }
+          });
+        }
+
         tr.querySelector(".order-details-btn").addEventListener("click", () => {
           document.getElementById("order-details-body").innerHTML = `
             <div class="text-xs text-gray-500 mb-2">${o.retailerCompany} · ${formatOrderDate(o.createdAt)} · ${orderStatusLabel(o)}</div>
             ${orderItemsHtml(o.items)}
+            ${orderShippingHtml(o)}
             <div class="flex justify-between font-semibold text-sm border-t border-gray-100 pt-2 mt-2">
               <span>Összesen</span><span>${o.total?.toLocaleString("hu-HU")} ${o.currency}</span>
             </div>
@@ -1143,6 +1218,94 @@
         passwordSetupBodyHu: document.getElementById("email-body-hu").value,
         passwordSetupBodyEn: document.getElementById("email-body-en").value,
       });
+      status.textContent = "Mentve ✓";
+      setTimeout(() => { status.textContent = ""; }, 2000);
+    } catch (err) {
+      status.textContent = `Hiba: ${err.code || err.message}`;
+    }
+  });
+
+  // ============== SZÁLLÍTÁS ==============
+
+  function addWeightRow(type = "", weightKg = "") {
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-2";
+    row.innerHTML = `
+      <input type="text" list="type-suggestions" placeholder="Termék típus (pl. CDL100)" value="${type}"
+             class="weight-type flex-1 border rounded px-2 py-1.5 text-sm">
+      <input type="number" min="0" step="0.01" placeholder="kg" value="${weightKg}"
+             class="weight-kg w-24 border rounded px-2 py-1.5 text-sm">
+      <span class="text-gray-400 text-xs">kg</span>
+      <button type="button" class="weight-remove text-red-500 text-sm px-1">✕</button>
+    `;
+    row.querySelector(".weight-remove").addEventListener("click", () => row.remove());
+    document.getElementById("weight-rows").appendChild(row);
+  }
+  document.getElementById("weight-add-row").addEventListener("click", () => addWeightRow());
+
+  function addTierRowShipping(maxWeight = "", price = "") {
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-2";
+    row.innerHTML = `
+      <span class="text-xs text-gray-400">0 –</span>
+      <input type="number" min="0" step="0.1" placeholder="kg-ig" value="${maxWeight}"
+             class="tier-max-weight w-20 border rounded px-2 py-1.5 text-sm">
+      <span class="text-xs text-gray-400">kg →</span>
+      <input type="number" min="0" step="1" placeholder="HUF" value="${price}"
+             class="tier-ship-price w-28 border rounded px-2 py-1.5 text-sm">
+      <span class="text-xs text-gray-400">HUF</span>
+      <button type="button" class="tier-ship-remove text-red-500 text-sm px-1">✕</button>
+    `;
+    row.querySelector(".tier-ship-remove").addEventListener("click", () => row.remove());
+    document.getElementById("tier-rows").appendChild(row);
+  }
+  document.getElementById("tier-add-row").addEventListener("click", () => addTierRowShipping());
+
+  async function loadShippingSettings() {
+    const snap = await getDoc(doc(db, "settings", "shipping"));
+    const data = snap.exists() ? snap.data() : {};
+
+    document.getElementById("weight-rows").innerHTML = "";
+    const weights = data.weightsByType || { CDL100: 0.25, RALS100: 0.21, RD100: 0.25 };
+    Object.keys(weights).forEach((type) => addWeightRow(type, weights[type]));
+
+    document.getElementById("tier-rows").innerHTML = "";
+    const tiers = data.domesticTiers || [
+      { maxWeight: 2, price: 1806 },
+      { maxWeight: 3, price: 2100 },
+      { maxWeight: 5, price: 2302 },
+      { maxWeight: 15, price: 3000 },
+    ];
+    tiers.forEach((t) => addTierRowShipping(t.maxWeight, t.price));
+
+    document.getElementById("ship-eur-multiplier").value = data.eurMultiplier ?? 3;
+    document.getElementById("ship-eur-rate").value = data.eurRate ?? 362;
+  }
+
+  document.getElementById("shipping-save").addEventListener("click", async () => {
+    const status = document.getElementById("shipping-save-status");
+    status.textContent = "Mentés...";
+
+    const weightsByType = {};
+    document.querySelectorAll("#weight-rows > div").forEach((row) => {
+      const type = row.querySelector(".weight-type").value.trim();
+      const kg = parseFloat(row.querySelector(".weight-kg").value);
+      if (type && !isNaN(kg)) weightsByType[type] = kg;
+    });
+
+    const domesticTiers = [...document.querySelectorAll("#tier-rows > div")]
+      .map((row) => ({
+        maxWeight: parseFloat(row.querySelector(".tier-max-weight").value),
+        price: parseFloat(row.querySelector(".tier-ship-price").value),
+      }))
+      .filter((t) => !isNaN(t.maxWeight) && !isNaN(t.price))
+      .sort((a, b) => a.maxWeight - b.maxWeight);
+
+    const eurMultiplier = parseFloat(document.getElementById("ship-eur-multiplier").value) || 3;
+    const eurRate = parseFloat(document.getElementById("ship-eur-rate").value) || 362;
+
+    try {
+      await setDoc(doc(db, "settings", "shipping"), { weightsByType, domesticTiers, eurMultiplier, eurRate });
       status.textContent = "Mentve ✓";
       setTimeout(() => { status.textContent = ""; }, 2000);
     } catch (err) {
