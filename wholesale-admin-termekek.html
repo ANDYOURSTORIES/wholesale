@@ -1471,7 +1471,12 @@
     else { buyer.countryCode = ""; buyer.countryName = ""; out.warnings.push("Az országot nem sikerült felismerni."); }
     const cityLine = addrLines.pop() || "";
     const cm = cityLine.match(/^(.*?),\s*(.+)$/);
-    if (cm) { buyer.city = cm[1].trim(); buyer.postCode = cm[2].trim(); }
+    if (cm) {
+    // "Paris, IDF 75011" → régió/állam kód leválasztása, csak az irányítószám marad
+    const parts = cm[2].trim().split(/\s+/);
+    while (parts.length > 1 && /^[A-Za-z]+$/.test(parts[0])) parts.shift();
+    buyer.city = cm[1].trim(); buyer.postCode = parts.join(" ");
+  }
     else { buyer.city = cityLine; buyer.postCode = ""; }
     buyer.address = addrLines.join(", ");
     out.buyer = buyer;
