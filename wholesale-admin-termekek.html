@@ -1707,6 +1707,7 @@
       shipping: o.shipping,
       taxableTotal: o.taxableTotal,
       replacesInvoice: o.replacesInvoice || "",
+      conversionRate: o.conversionRate || "",
     };
   }
 
@@ -1822,6 +1823,7 @@
             </div>
             ${field("taxNumber", o.buyer.countryCode === "HU" ? "Adószám (12345678-1-12)" : "Adószám", o.buyer.taxNumber)}
             ${field("replacesInvoice", "Sztornózott számla száma (ha újrakiállítás)", o.replacesInvoice || "")}
+            ${o.currency !== "HUF" ? field("conversionRate", `MNB ${faireEsc(o.currency)} árfolyam a teljesítés napjára (üresen: automatikus)`, o.conversionRate || "") : ""}
             <p class="text-xs text-gray-400">Teljesítés: ${faireEsc(o.shipmentDate)} · Faire számla: ${faireEsc(o.faireInvoiceNumber || "-")} · Fájl: ${faireEsc(o.fileName || "")}</p>
           </div>
           <div>
@@ -1843,6 +1845,7 @@
       inp.addEventListener("change", () => {
         const key = inp.dataset.key;
         if (key === "replacesInvoice") o.replacesInvoice = inp.value.trim();
+        else if (key === "conversionRate") o.conversionRate = inp.value.trim().replace(",", ".");
         else o.buyer[key] = key === "countryCode" ? inp.value.trim().toUpperCase() : inp.value.trim();
         // újraellenőrzés a javított adatokkal
         o.warnings = o.warnings.filter((w) => !/országot/.test(w) || !o.buyer.countryCode);
