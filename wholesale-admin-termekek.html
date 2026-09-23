@@ -230,6 +230,7 @@
     <div id="faire-bulk-bar" class="hidden bg-gray-900 text-white rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center gap-3 text-sm">
       <span id="faire-selected-count">0 kijelölve</span>
       <button id="faire-create-btn" class="bg-white text-gray-900 rounded px-3 py-1 font-medium">Draft számlák létrehozása a Billingóban</button>
+      <button id="faire-delete-btn" class="hidden bg-white/10 hover:bg-white/20 text-red-200 rounded px-3 py-1">Törlés</button>
     </div>
 
     <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
@@ -1685,6 +1686,9 @@
     return o.blocks.length ? "blocked" : "ready";
   }
 
+  const faireIsDraft = (no) => faireServer.get(no)?.status === "draft_created";
+  const faireSelectable = (no) => faireRowState(no) === "ready" || faireIsDraft(no);
+
   function faireBuildPayload(o) {
     const isHu = o.buyer.countryCode === "HU";
     return {
@@ -1720,7 +1724,7 @@
 
     const counts = { ready: 0, blocked: 0, done: 0, missing: 0 };
     rows.forEach((r) => counts[r.state]++);
-    [...faireSelected].forEach((no) => { if (faireRowState(no) !== "ready") faireSelected.delete(no); });
+    [...faireSelected].forEach((no) => { if (!faireSelectable(no)) faireSelected.delete(no); });
 
     const tbody = document.getElementById("faire-rows");
     const visible = rows.filter((r) => filter === "all" || r.state === filter);
@@ -1735,8 +1739,16 @@
     document.getElementById("faire-filter").options[2].text = `Ellenőrzés kell (${counts.blocked})`;
     document.getElementById("faire-filter").options[3].text = `Már számlázva (${counts.done})`;
     document.getElementById("faire-filter").options[4].text = `PDF hiányzik (${counts.missing})`;
+    const selReady = [...faireSelected].filter((no) => faireRowState(no) === "ready").length;
+    const selDraft = [...faireSelected].filter(faireIsDraft).length;
     document.getElementById("faire-selected-count").textContent = `${faireSelected.size} kijelölve`;
     document.getElementById("faire-bulk-bar").classList.toggle("hidden", faireSelected.size === 0);
+    const cBtn = document.getElementById("faire-create-btn");
+    cBtn.classList.toggle("hidden", selReady === 0);
+    if (!cBtn.disabled) cBtn.textContent = `Draft számla létrehozása (${selReady})`;
+    const dBtn = document.getElementById("faire-delete-btn");
+    dBtn.classList.toggle("hidden", selDraft === 0);
+    if (!dBtn.disabled) dBtn.textContent = `Törlés (${selDraft})`;
     const readyVisible = visible.filter((r) => r.state === "ready");
     document.getElementById("faire-select-all").checked = readyVisible.length > 0 && readyVisible.every((r) => faireSelected.has(r.no));
   }
@@ -1769,7 +1781,7 @@
     }
 
     tr.innerHTML = `
-      <td class="px-3 py-2">${state === "ready" ? `<input type="checkbox" class="faire-row-check" ${faireSelected.has(no) ? "checked" : ""}>` : ""}</td>
+      <td class="px-3 py-2">${faireSelectable(no) ? `<input type="checkbox" class="faire-row-check" ${faireSelected.has(no) ? "checked" : ""}>` : ""}</td>
       <td class="px-3 py-2"><div class="font-medium">#${faireEsc(no)}</div><div class="text-xs text-gray-400">${faireEsc(date)}</div></td>
       <td class="px-3 py-2"><div>${faireEsc(name)}</div><div class="text-xs text-gray-400">${faireEsc(country)} ${faireEsc(o?.buyer.taxNumber || p?.retailerVat || "")}</div></td>
       <td class="px-3 py-2 text-right whitespace-nowrap">${faireMoney(net)}${totalCheck}</td>
@@ -1866,7 +1878,7 @@
   });
 
   document.getElementById("faire-create-btn").addEventListener("click", async (e) => {
-    const list = [...faireSelected].map((no) => faireOrders.get(no)).filter((o) => o && !o.blocks.length);
+    const list = [...faireSelected].filter((no) => faireRowState(no) === "ready").map((no) => faireOrders.get(no)).filter((o) => o && !o.blocks.length);
     if (!list.length) return;
     const total = list.reduce((s, o) => s + (o.taxableTotal || 0), 0);
     if (!confirm(`${list.length} draft számla készül a Faire számlatömbben, összesen ${faireMoney(total)} nettó értékben.\n\nA Billingo semmit nem küld ki és nem véglegesít. Mehet?`)) return;
@@ -1884,13 +1896,34 @@
       alert(`Hiba: ${err.message}`);
     }
     btn.disabled = false;
-    btn.textContent = "Draft számlák létrehozása a Billingóban";
     faireSelected.clear();
     await faireLoadServer();
 
     const okCount = results.filter((r) => r.ok).length;
     const errors = results.filter((r) => !r.ok);
     faireSetStatus(`${okCount} draft létrehozva.` + (errors.length ? ` ${errors.length} kihagyva vagy hibás — részletek a felugró ablakban.` : ""));
+    if (errors.length) alert(errors.map((r) => `#${r.orderNumber}: ${r.error}`).join("\n\n"));
+  });
+
+  document.getElementById("faire-delete-btn").addEventListener("click", async (e) => {
+    const nos = [...faireSelected].filter(faireIsDraft);
+    if (!nos.length) return;
+    if (!confirm(`${nos.length} rendelés draftját törlöd:\n${nos.map((n) => "#" + n).join(", ")}\n\nHa a draft még megvan a Billingóban, onnan is törlődik. Véglegesített számlát nem töröl. A rendelések újra „Draftra kész” állapotba kerülnek. Mehet?`)) return;
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = "Törlés…";
+    let results = [];
+    try {
+      results = await callFaire("deleteDrafts", { orderNumbers: nos });
+    } catch (err) {
+      alert(`Hiba: ${err.message}`);
+    }
+    btn.disabled = false;
+    faireSelected.clear();
+    await faireLoadServer();
+    const okCount = results.filter((r) => r.ok).length;
+    const errors = results.filter((r) => !r.ok);
+    faireSetStatus(`${okCount} draft törölve.` + (errors.length ? ` ${errors.length} nem törölhető.` : ""));
     if (errors.length) alert(errors.map((r) => `#${r.orderNumber}: ${r.error}`).join("\n\n"));
   });
 </script>
