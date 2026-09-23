@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wholesale admin — Termékek</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -37,6 +38,7 @@
     </button>
     <button id="tab-email-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">Email sablon</button>
     <button id="tab-shipping-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">Szállítás</button>
+    <button id="tab-faire-btn" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500">Faire számlák</button>
   </div>
 
   <!-- Termékek nézet -->
@@ -197,6 +199,59 @@
       <span id="shipping-save-status" class="text-xs text-gray-500"></span>
     </div>
   </div>
+
+  <!-- Faire számlák nézet -->
+  <div id="tab-faire" class="hidden">
+    <p class="text-sm text-gray-600 mb-4 max-w-3xl">
+      Töltsd fel a Faire order invoice PDF-eket. Az oldal kiolvassa belőlük a vevőt és a tételeket, és a kijelölt rendelésekből
+      piszkozat (draft) számlát készít a Faire számlatömbben. Semmit nem küld ki és nem véglegesít — azt te teszed meg a Billingóban.
+    </p>
+
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <label class="bg-gray-900 text-white rounded px-3 py-1.5 text-sm cursor-pointer">
+        PDF-ek feltöltése
+        <input id="faire-pdf-input" type="file" accept="application/pdf" multiple class="hidden">
+      </label>
+      <label class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm cursor-pointer">
+        Kifizetési CSV (nem kötelező)
+        <input id="faire-csv-input" type="file" accept=".csv,text/csv" class="hidden">
+      </label>
+      <button id="faire-refresh-btn" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm">Állapotok frissítése</button>
+      <select id="faire-filter" class="border rounded px-3 py-1.5 text-sm">
+        <option value="all">Mind</option>
+        <option value="ready">Draftra kész</option>
+        <option value="blocked">Ellenőrzés kell</option>
+        <option value="done">Már számlázva</option>
+        <option value="missing">PDF hiányzik</option>
+      </select>
+    </div>
+    <p id="faire-status" class="text-xs text-gray-500 mb-4"></p>
+
+    <div id="faire-bulk-bar" class="hidden bg-gray-900 text-white rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center gap-3 text-sm">
+      <span id="faire-selected-count">0 kijelölve</span>
+      <button id="faire-create-btn" class="bg-white text-gray-900 rounded px-3 py-1 font-medium">Draft számlák létrehozása a Billingóban</button>
+    </div>
+
+    <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-left text-gray-500 text-xs">
+          <tr>
+            <th class="px-3 py-2 w-8"><input type="checkbox" id="faire-select-all"></th>
+            <th class="px-3 py-2 font-medium">Rendelés</th>
+            <th class="px-3 py-2 font-medium">Vevő</th>
+            <th class="px-3 py-2 font-medium text-right">Nettó</th>
+            <th class="px-3 py-2 font-medium">ÁFA</th>
+            <th class="px-3 py-2 font-medium text-right">Kifizetés</th>
+            <th class="px-3 py-2 font-medium">Állapot</th>
+            <th class="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody id="faire-rows">
+          <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400">Még nincs feltöltött Faire számla.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Árkategória szerkesztő modal -->
@@ -324,6 +379,7 @@
     orders: document.getElementById("tab-orders-btn"),
     email: document.getElementById("tab-email-btn"),
     shipping: document.getElementById("tab-shipping-btn"),
+    faire: document.getElementById("tab-faire-btn"),
   };
   const tabPanels = {
     products: document.getElementById("tab-products"),
@@ -332,6 +388,7 @@
     orders: document.getElementById("tab-orders"),
     email: document.getElementById("tab-email"),
     shipping: document.getElementById("tab-shipping"),
+    faire: document.getElementById("tab-faire"),
   };
 
   function activateTab(tab) {
@@ -349,6 +406,7 @@
   tabButtons.orders.addEventListener("click", () => activateTab("orders"));
   tabButtons.email.addEventListener("click", () => activateTab("email"));
   tabButtons.shipping.addEventListener("click", () => activateTab("shipping"));
+  tabButtons.faire.addEventListener("click", () => { activateTab("faire"); faireLoadServer(); });
 
   // --- Állapot ---
   let currentProducts = []; // [{sku, data}]
@@ -1311,6 +1369,517 @@
     } catch (err) {
       status.textContent = `Hiba: ${err.code || err.message}`;
     }
+  });
+
+  // =====================================================================
+  // --- Faire számlák → Billingo draft ---
+  // =====================================================================
+  const FAIRE_FUNCTION_URL = "https://wholesale-faire-draft-642343737324.europe-west1.run.app";
+
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  // ===== FAIRE PARSER START =====
+  const FAIRE_EU = ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"];
+  const FAIRE_COUNTRIES = {
+    "austria":"AT","belgium":"BE","bulgaria":"BG","croatia":"HR","cyprus":"CY","czech republic":"CZ","czechia":"CZ","denmark":"DK",
+    "estonia":"EE","finland":"FI","france":"FR","germany":"DE","greece":"GR","hungary":"HU","ireland":"IE","italy":"IT","latvia":"LV",
+    "lithuania":"LT","luxembourg":"LU","malta":"MT","netherlands":"NL","the netherlands":"NL","poland":"PL","portugal":"PT","romania":"RO",
+    "slovakia":"SK","slovenia":"SI","spain":"ES","sweden":"SE","united kingdom":"GB","uk":"GB","great britain":"GB","switzerland":"CH",
+    "norway":"NO","iceland":"IS","liechtenstein":"LI","united states":"US","usa":"US","canada":"CA","australia":"AU","new zealand":"NZ",
+    "monaco":"MC","andorra":"AD","serbia":"RS","bosnia and herzegovina":"BA","montenegro":"ME","north macedonia":"MK","albania":"AL",
+    "ukraine":"UA","turkey":"TR","türkiye":"TR","israel":"IL","united arab emirates":"AE","japan":"JP","singapore":"SG","hong kong":"HK"
+  };
+  const MONTHS = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+  function faireAmount(s) {
+    if (s == null) return null;
+    let t = String(s).replace(/[€£$\s]/g, "").replace(/EUR|GBP|USD/g, "");
+    const neg = t.startsWith("-") || t.startsWith("−");
+    t = t.replace(/^[-−]/, "");
+    if (!/^[\d.,]+$/.test(t)) return null;
+    const lc = t.lastIndexOf(","), ld = t.lastIndexOf(".");
+    if (lc > ld) t = t.replace(/\./g, "").replace(",", "."); else t = t.replace(/,/g, "");
+    const n = parseFloat(t);
+    return isNaN(n) ? null : (neg ? -n : n);
+  }
+  function faireDate(s) {
+    const m = String(s || "").match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),\s*(\d{4})/);
+    if (!m || !MONTHS[m[1].toLowerCase()]) return null;
+    return `${m[3]}-${String(MONTHS[m[1].toLowerCase()]).padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  }
+  function faireLines(items) {
+    const sorted = [...items].filter(i => i.str.trim()).sort((a,b) => a.page - b.page || b.y - a.y || a.x - b.x);
+    const lines = [];
+    for (const it of sorted) {
+      const last = lines[lines.length - 1];
+      if (last && last.page === it.page && Math.abs(last.y - it.y) <= 2) last.items.push(it);
+      else lines.push({ page: it.page, y: it.y, items: [it] });
+    }
+    lines.forEach(l => { l.items.sort((a,b) => a.x - b.x); l.text = l.items.map(i => i.str.trim()).join(" "); });
+    return lines;
+  }
+  const r2 = n => Math.round(n * 100) / 100;
+
+  function parseFaireInvoice(rawItems) {
+    const lines = faireLines(rawItems);
+    const all = lines.map(l => l.text).join("\n");
+    const out = { warnings: [], items: [], adjustments: [], shipping: 0 };
+    if (!/Order invoice/i.test(all)) out.warnings.push("Nem Faire order invoice-nak tűnik.");
+    if (/PRO\s*FORMA/i.test(all)) out.warnings.push("PRO FORMA feliratú (a rendelés még nincs kiszállítva).");
+
+    const om = all.match(/Order #([A-Z0-9]+) placed on ([A-Za-z]+\.? \d{1,2}, \d{4})/);
+    out.orderNumber = om ? om[1] : null;
+    out.orderDate = om ? faireDate(om[2]) : null;
+
+    // Jobb oszlop (x > 280): számlaszám, dátum, Bill to
+    const right = lines.map(l => ({ ...l, items: l.items.filter(i => i.x > 280) }))
+      .filter(l => l.items.length).map(l => ({ ...l, text: l.items.map(i => i.str.trim()).join(" ") }));
+    const idx = (re) => right.findIndex(l => re.test(l.text));
+    const iInv = idx(/^Invoice$/);
+    if (iInv >= 0 && right[iInv+1] && right[iInv+1].text.startsWith("#")) out.faireInvoiceNumber = right[iInv+1].text.slice(1);
+    const iDate = idx(/Invoice and shipment date|Shipment date|Invoice date/i);
+    out.shipmentDate = iDate >= 0 && right[iDate+1] ? faireDate(right[iDate+1].text) : null;
+
+    const iBill = idx(/^Bill to:?$/i);
+    const block = [];
+    if (iBill >= 0) {
+      for (let k = iBill + 1; k < right.length; k++) {
+        const t = right[k].text;
+        if (right[k].page !== right[iBill].page) break;
+        if (/^(Ship to|SKU|Item Name|Qty)/i.test(t)) break;
+        block.push(t);
+        if (/^VAT#|^Tax ID|^EORI/i.test(t)) { /* keep going for EORI */ }
+        if (right[iBill].y - right[k].y > 140) break;
+      }
+    }
+    const buyer = { name: block[0] || "", taxNumber: "", eori: "" };
+    const addrLines = [];
+    for (const t of block.slice(1)) {
+      let m;
+      if ((m = t.match(/^VAT#?:?\s*(.+)$/i))) buyer.taxNumber = m[1].trim();
+      else if ((m = t.match(/^EORI#?:?\s*(.+)$/i))) buyer.eori = m[1].trim();
+      else if (/^\+?[\d\s()\-\/]{7,}$/.test(t)) buyer.phone = t;
+      else addrLines.push(t);
+    }
+    // utolsó sor ország, előtte "Város, irsz"
+    let country = addrLines.length ? addrLines[addrLines.length - 1] : "";
+    const cc = FAIRE_COUNTRIES[country.toLowerCase()];
+    if (cc) { buyer.countryCode = cc; buyer.countryName = country; addrLines.pop(); }
+    else { buyer.countryCode = ""; buyer.countryName = ""; out.warnings.push("Az országot nem sikerült felismerni."); }
+    const cityLine = addrLines.pop() || "";
+    const cm = cityLine.match(/^(.*?),\s*(.+)$/);
+    if (cm) { buyer.city = cm[1].trim(); buyer.postCode = cm[2].trim(); }
+    else { buyer.city = cityLine; buyer.postCode = ""; }
+    buyer.address = addrLines.join(", ");
+    out.buyer = buyer;
+
+    // Tételek: Qty oszlop x-pozíciója a fejlécből
+    const header = lines.find(l => l.items.some(i => /^Qty\.?$/.test(i.str.trim())));
+    const qtyX = header ? header.items.find(i => /^Qty\.?$/.test(i.str.trim())).x : 382;
+    const wspX = header && header.items.find(i => /^WSP\.?$/.test(i.str.trim())) ? header.items.find(i => /^WSP\.?$/.test(i.str.trim())).x : 421;
+    const nameX = header && header.items.find(i => /^Item Name$/.test(i.str.trim())) ? header.items.find(i => /^Item Name$/.test(i.str.trim())).x : 125;
+
+    let inTotals = false, last = null;
+    for (const l of lines) {
+      if (l === header || /^SKU Item Name/.test(l.text)) { continue; }
+      const labelItems = l.items.filter(i => i.x < qtyX - 10);
+      const label = labelItems.map(i => i.str.trim()).join(" ");
+      if (/^Item subtotal/i.test(label)) { inTotals = true; out.itemSubtotal = faireAmount(l.items[l.items.length-1].str); continue; }
+      if (!inTotals) {
+        const q = l.items.find(i => Math.abs(i.x - qtyX) < 15 && /^\d+$/.test(i.str.trim()));
+        const w = l.items.find(i => Math.abs(i.x - wspX) < 20 && faireAmount(i.str) != null);
+        if (q && w) {
+          const sku = l.items.find(i => i.x < nameX - 5);
+          const name = l.items.filter(i => i.x >= nameX - 5 && i.x < qtyX - 5).map(i => i.str.trim()).join(" ");
+          const sub = l.items.filter(i => i.x > wspX + 40).map(i => faireAmount(i.str)).filter(v => v != null).pop();
+          last = { sku: sku ? sku.str.trim() : "", rawName: name, quantity: parseInt(q.str, 10), unitPrice: faireAmount(w.str), lineTotal: sub };
+          out.items.push(last);
+        } else if (last && !/SRP/.test(l.text) && l.items.every(i => i.x >= nameX - 5 && i.x < qtyX - 5)) {
+          last.rawName += " " + l.text; // tördelt terméknév
+        }
+        continue;
+      }
+      const amtItem = l.items.filter(i => i.x > qtyX).pop();
+      const amt = amtItem ? faireAmount(amtItem.str) : null;
+      if (amt == null || !label) continue;
+      if (/^Shipping/i.test(label)) out.shipping = r2(out.shipping + amt);
+      else if (/^Total taxable amount/i.test(label)) out.taxableTotal = amt;
+      else if (/^VAT/i.test(label)) { out.vatLabel = label; out.vatAmount = amt; const pm = label.match(/(\d+(?:[.,]\d+)?)\s*%/); out.vatRate = pm ? parseFloat(pm[1].replace(",", ".")) : null; }
+      else if (/^Total order amount/i.test(label)) out.grossTotal = amt;
+      else if (/^(Faire discount|Total amount retailer paid)/i.test(label)) { /* Faire és a vevő ügye */ }
+      else if (out.taxableTotal == null) out.adjustments.push({ name: label, unitPrice: amt });
+    }
+    out.items.forEach(i => { i.name = i.rawName.replace(/\s*-\s*default$/i, "").trim(); });
+    out.currency = /£/.test(all) && !/€/.test(all) ? "GBP" : "EUR";
+
+    // Ellenőrzések
+    const itemsSum = r2(out.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
+    if (out.itemSubtotal != null && Math.abs(itemsSum - out.itemSubtotal) > 0.02) out.warnings.push(`Tételek összege ${itemsSum} ≠ Item subtotal ${out.itemSubtotal}`);
+    const calc = r2(itemsSum + out.adjustments.reduce((s, a) => s + a.unitPrice, 0) + out.shipping);
+    if (out.taxableTotal == null) out.warnings.push("Nem található a „Total taxable amount” sor.");
+    else if (Math.abs(calc - out.taxableTotal) > 0.02) out.warnings.push(`Számolt nettó ${calc} ≠ Faire nettó ${out.taxableTotal}`);
+    if (!out.orderNumber) out.warnings.push("Nem található a rendelésszám.");
+    if (!out.shipmentDate) out.warnings.push("Nem található a szállítási dátum.");
+    return out;
+  }
+
+  // Besorolás: vatKind + blokkoló okok (ezeknél nem generálunk automatikusan)
+  function classifyFaireOrder(o) {
+    const blocks = [], notes = [];
+    const cc = o.buyer.countryCode;
+    const tax = (o.buyer.taxNumber || "").replace(/\s/g, "").toUpperCase();
+    const vatAmt = o.vatAmount || 0;
+    if (!cc) blocks.push("Ismeretlen ország");
+    else if (cc === "HU") {
+      o.vatKind = "domestic";
+      if (!/^\d{8}-\d-\d{2}$/.test(o.buyer.taxNumber || "")) blocks.push("Magyar vevőnél a belföldi adószám kell (12345678-1-12 formátum)");
+      if (o.taxableTotal != null && Math.abs(r2(o.taxableTotal * 0.27) - vatAmt) > 0.05) notes.push(`A Faire ÁFA (${vatAmt}) eltér a 27%-tól`);
+    } else if (FAIRE_EU.includes(cc)) {
+      o.vatKind = "eu";
+      if (vatAmt > 0) blocks.push(`A Faire ${o.vatRate ?? "?"}% ÁFA-t szedett be (adószám nélküli bolt) — könyvelői döntés kell (OSS)`);
+      const prefix = cc === "GR" ? "EL" : cc;
+      if (!tax) blocks.push("Nincs közösségi adószám — 0% nem alkalmazható");
+      else if (!tax.startsWith(prefix)) blocks.push(`Az adószám nem ${prefix} előtaggal kezdődik — VIES-ben ellenőrizni`);
+    } else {
+      o.vatKind = "export";
+      notes.push("EU-n kívüli: export, kiléptetési igazolás kell");
+      if (vatAmt > 0) blocks.push("EU-n kívüli rendelésen ÁFA szerepel — ellenőrizni");
+    }
+    if (o.warnings.length) blocks.push(...o.warnings);
+    o.blocks = blocks; o.notes = notes;
+    return o;
+  }
+  // ===== FAIRE PARSER END =====
+
+  const faireOrders = new Map();   // orderNumber -> parsed + classified order (feltöltött PDF-ekből)
+  let faireServer = new Map();     // orderNumber -> faireOrders Firestore doc (állapot)
+  let fairePayouts = new Map();    // orderNumber -> CSV sor
+  const faireSelected = new Set();
+  const faireOpen = new Set();
+
+  const faireEsc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const faireMoney = (n, cur = "EUR") => (n == null ? "–" : `${Number(n).toLocaleString("hu-HU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur === "EUR" ? "€" : cur}`);
+  const VAT_KIND_LABEL = { eu: "0% KBT (EU)", export: "0% export", domestic: "27%" };
+
+  async function callFaire(action, body = {}) {
+    const idToken = await auth.currentUser.getIdToken();
+    const res = await fetch(FAIRE_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action, ...body }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    return text ? JSON.parse(text) : null;
+  }
+
+  function faireSetStatus(msg) { document.getElementById("faire-status").textContent = msg; }
+
+  async function faireLoadServer() {
+    try {
+      const list = await callFaire("list");
+      faireServer = new Map(list.map((d) => [d.id, d]));
+      list.forEach((d) => { if (d.payout && !fairePayouts.has(d.id)) fairePayouts.set(d.id, d.payout); });
+      renderFaire();
+    } catch (err) {
+      faireSetStatus(`Nem sikerült betölteni az állapotokat: ${err.message}`);
+    }
+  }
+
+  async function faireReadPdf(file) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const pdf = await window.pdfjsLib.getDocument({ data }).promise;
+    const items = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      tc.items.forEach((it) => items.push({ page: p, x: it.transform[4], y: it.transform[5], str: it.str }));
+    }
+    return classifyFaireOrder(parseFaireInvoice(items));
+  }
+
+  document.getElementById("faire-pdf-input").addEventListener("change", async (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    if (!files.length) return;
+    if (!window.pdfjsLib) { faireSetStatus("A PDF-olvasó nem töltődött be — frissítsd az oldalt."); return; }
+    let ok = 0; const failed = [];
+    for (const [i, f] of files.entries()) {
+      faireSetStatus(`PDF-ek olvasása… ${i + 1} / ${files.length}`);
+      try {
+        const o = await faireReadPdf(f);
+        if (!o.orderNumber) throw new Error("nincs rendelésszám");
+        o.fileName = f.name;
+        faireOrders.set(o.orderNumber, o);
+        ok++;
+      } catch (err) {
+        failed.push(`${f.name} (${err.message})`);
+      }
+    }
+    faireSetStatus(`${ok} PDF beolvasva.` + (failed.length ? ` Nem sikerült: ${failed.join(", ")}` : ""));
+    renderFaire();
+  });
+
+  function faireParseCsv(text) {
+    const rows = []; let row = [], field = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"' && text[i + 1] === '"') { field += '"'; i++; } else if (c === '"') q = false; else field += c; }
+      else if (c === '"') q = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(field); rows.push(row); row = []; field = ""; }
+      else field += c;
+    }
+    if (field || row.length) { row.push(field); rows.push(row); }
+    const [head, ...body] = rows.filter((r) => r.some((v) => v.trim()));
+    return body.map((r) => Object.fromEntries(head.map((h, i) => [h.trim(), (r[i] ?? "").trim()])));
+  }
+
+  document.getElementById("faire-csv-input").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? 0 : n; };
+    const rows = faireParseCsv(await file.text()).filter((r) => r["Order Number"]).map((r) => ({
+      orderNumber: r["Order Number"],
+      retailerName: r["Retailer Name"],
+      orderDate: r["Order Date"],
+      payoutDate: r["Payout Date"],
+      payoutAmount: num(r["Payout Amount"]),
+      commission: num(r["Commission"]),
+      nextDayFee: num(r["ACH Next Day Fee"]),
+      shippingReimbursement: num(r["Shipping Cost Reimbursement"]),
+      totalExclVat: num(r["Total excluding VAT"]),
+      vatAmount: num(r["VAT Amount"]),
+      totalInclVat: num(r["Total including VAT"]),
+      retailerVat: r["Retailer VAT number"],
+      currency: r["Currency"] || "EUR",
+    }));
+    rows.forEach((r) => fairePayouts.set(r.orderNumber, r));
+    renderFaire();
+    try {
+      await callFaire("saveCsv", { rows });
+      faireSetStatus(`${rows.length} rendelés kifizetési adatai betöltve és elmentve.`);
+    } catch (err) {
+      faireSetStatus(`CSV betöltve, de a mentés nem sikerült: ${err.message}`);
+    }
+  });
+
+  // Egy sor állapota: done | ready | blocked | missing
+  function faireRowState(no) {
+    const s = faireServer.get(no);
+    if (s && (s.status === "draft_created" || s.status === "manual")) return "done";
+    const o = faireOrders.get(no);
+    if (!o) return "missing";
+    return o.blocks.length ? "blocked" : "ready";
+  }
+
+  function faireBuildPayload(o) {
+    const isHu = o.buyer.countryCode === "HU";
+    return {
+      orderNumber: o.orderNumber,
+      faireInvoiceNumber: o.faireInvoiceNumber || "",
+      orderDate: o.orderDate,
+      shipmentDate: o.shipmentDate,
+      currency: o.currency,
+      vatKind: o.vatKind,
+      buyer: {
+        name: o.buyer.name, address: o.buyer.address, postCode: o.buyer.postCode, city: o.buyer.city,
+        countryCode: o.buyer.countryCode, taxNumber: o.buyer.taxNumber || "",
+      },
+      items: o.items.map((i) => ({ sku: i.sku, name: i.name, quantity: i.quantity, unitPrice: i.unitPrice })),
+      adjustments: o.adjustments.map((a) => {
+        const m = a.name.match(/^Promo\s*\((.+)\)$/i);
+        const name = m ? `${isHu ? "Kedvezmény" : "Discount"} (${m[1]})` : a.name;
+        return { name, unitPrice: a.unitPrice };
+      }),
+      shipping: o.shipping,
+      taxableTotal: o.taxableTotal,
+      replacesInvoice: o.replacesInvoice || "",
+    };
+  }
+
+  function renderFaire() {
+    const filter = document.getElementById("faire-filter").value;
+    const numbers = [...new Set([...faireOrders.keys(), ...fairePayouts.keys(), ...faireServer.keys()])];
+    const rows = numbers.map((no) => ({ no, state: faireRowState(no), o: faireOrders.get(no), p: fairePayouts.get(no), s: faireServer.get(no) }))
+      .filter((r) => r.o || r.p || (r.s && r.s.status))
+      .sort((a, b) => String((b.o?.orderDate) || (b.p?.orderDate) || "").localeCompare(String((a.o?.orderDate) || (a.p?.orderDate) || "")));
+
+    const counts = { ready: 0, blocked: 0, done: 0, missing: 0 };
+    rows.forEach((r) => counts[r.state]++);
+    [...faireSelected].forEach((no) => { if (faireRowState(no) !== "ready") faireSelected.delete(no); });
+
+    const tbody = document.getElementById("faire-rows");
+    const visible = rows.filter((r) => filter === "all" || r.state === filter);
+    if (!visible.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="px-3 py-8 text-center text-gray-400">${rows.length ? "Ebben a szűrésben nincs rendelés." : "Még nincs feltöltött Faire számla."}</td></tr>`;
+    } else {
+      tbody.innerHTML = "";
+      visible.forEach(({ no, state, o, p, s }) => tbody.append(...faireRowEls(no, state, o, p, s)));
+    }
+
+    document.getElementById("faire-filter").options[1].text = `Draftra kész (${counts.ready})`;
+    document.getElementById("faire-filter").options[2].text = `Ellenőrzés kell (${counts.blocked})`;
+    document.getElementById("faire-filter").options[3].text = `Már számlázva (${counts.done})`;
+    document.getElementById("faire-filter").options[4].text = `PDF hiányzik (${counts.missing})`;
+    document.getElementById("faire-selected-count").textContent = `${faireSelected.size} kijelölve`;
+    document.getElementById("faire-bulk-bar").classList.toggle("hidden", faireSelected.size === 0);
+    const readyVisible = visible.filter((r) => r.state === "ready");
+    document.getElementById("faire-select-all").checked = readyVisible.length > 0 && readyVisible.every((r) => faireSelected.has(r.no));
+  }
+
+  function faireRowEls(no, state, o, p, s) {
+    const tr = document.createElement("tr");
+    tr.className = "border-b border-gray-100 align-top";
+    const name = o?.buyer.name || p?.retailerName || s?.buyer?.name || "-";
+    const country = o?.buyer.countryCode || s?.buyer?.countryCode || "";
+    const date = o?.shipmentDate || p?.orderDate || s?.shipmentDate || "";
+    const net = o?.taxableTotal ?? s?.taxableTotal ?? p?.totalExclVat;
+
+    let status;
+    if (state === "done") {
+      status = s.status === "manual"
+        ? `<span class="text-gray-600">Kézzel kiállítva</span>${s.manualNote ? `<div class="text-xs text-gray-400">${faireEsc(s.manualNote)}</div>` : ""}`
+        : `<span class="text-green-700">Draft a Billingóban</span><div class="text-xs text-gray-400">ID: ${faireEsc(s.billingoDocumentId)}</div>`;
+    } else if (state === "missing") {
+      status = `<span class="text-gray-400">PDF hiányzik</span>`;
+    } else if (state === "blocked") {
+      status = `<span class="text-amber-700">Ellenőrzés kell</span><ul class="text-xs text-amber-700 list-disc ml-4 mt-0.5">${o.blocks.map((b) => `<li>${faireEsc(b)}</li>`).join("")}</ul>`;
+    } else {
+      status = `<span class="text-gray-900">Draftra kész</span>`;
+    }
+    if (o?.notes?.length && state !== "done") status += `<div class="text-xs text-gray-500 mt-0.5">${o.notes.map(faireEsc).join("<br>")}</div>`;
+
+    let totalCheck = "";
+    if (o && p && o.grossTotal != null && Math.abs(o.grossTotal - p.totalInclVat) > 0.02) {
+      totalCheck = `<div class="text-xs text-red-600">CSV végösszeg: ${faireMoney(p.totalInclVat)}</div>`;
+    }
+
+    tr.innerHTML = `
+      <td class="px-3 py-2">${state === "ready" ? `<input type="checkbox" class="faire-row-check" ${faireSelected.has(no) ? "checked" : ""}>` : ""}</td>
+      <td class="px-3 py-2"><div class="font-medium">#${faireEsc(no)}</div><div class="text-xs text-gray-400">${faireEsc(date)}</div></td>
+      <td class="px-3 py-2"><div>${faireEsc(name)}</div><div class="text-xs text-gray-400">${faireEsc(country)} ${faireEsc(o?.buyer.taxNumber || p?.retailerVat || "")}</div></td>
+      <td class="px-3 py-2 text-right whitespace-nowrap">${faireMoney(net)}${totalCheck}</td>
+      <td class="px-3 py-2 whitespace-nowrap">${o ? faireEsc(VAT_KIND_LABEL[o.vatKind] || "–") : "–"}</td>
+      <td class="px-3 py-2 text-right whitespace-nowrap">${p ? faireMoney(p.payoutAmount) : "–"}</td>
+      <td class="px-3 py-2">${status}</td>
+      <td class="px-3 py-2 text-right whitespace-nowrap">
+        ${o ? `<button class="faire-toggle text-xs text-blue-600">${faireOpen.has(no) ? "Bezár" : "Részletek"}</button>` : ""}
+        ${state === "done" && s.status === "manual" ? `<button class="faire-unmanual text-xs text-gray-500 ml-2">Visszavon</button>` : ""}
+        ${state !== "done" ? `<button class="faire-manual text-xs text-gray-500 ml-2">Kézzel kiállítva</button>` : ""}
+      </td>`;
+
+    tr.querySelector(".faire-row-check")?.addEventListener("change", (e) => {
+      e.target.checked ? faireSelected.add(no) : faireSelected.delete(no);
+      renderFaire();
+    });
+    tr.querySelector(".faire-toggle")?.addEventListener("click", () => {
+      faireOpen.has(no) ? faireOpen.delete(no) : faireOpen.add(no);
+      renderFaire();
+    });
+    tr.querySelector(".faire-manual")?.addEventListener("click", async () => {
+      const note = prompt(`#${no}: melyik számlaszámon állítottad ki kézzel? (nem kötelező)`, "");
+      if (note === null) return;
+      try { await callFaire("markManual", { orderNumber: no, note }); await faireLoadServer(); }
+      catch (err) { alert(`Hiba: ${err.message}`); }
+    });
+    tr.querySelector(".faire-unmanual")?.addEventListener("click", async () => {
+      if (!confirm(`#${no}: visszavonod a „kézzel kiállítva” jelölést?`)) return;
+      try { await callFaire("unmarkManual", { orderNumber: no }); await faireLoadServer(); }
+      catch (err) { alert(`Hiba: ${err.message}`); }
+    });
+
+    if (!o || !faireOpen.has(no)) return [tr];
+
+    const dtr = document.createElement("tr");
+    dtr.className = "border-b border-gray-100 bg-gray-50";
+    const editable = state !== "done";
+    const field = (key, label, value, cls = "w-full") =>
+      `<label class="block text-xs text-gray-500">${label}<input data-key="${key}" value="${faireEsc(value)}" ${editable ? "" : "disabled"} class="${cls} border rounded px-2 py-1 text-sm text-gray-900 mt-0.5 bg-white disabled:bg-gray-100"></label>`;
+    dtr.innerHTML = `
+      <td></td>
+      <td colspan="7" class="px-3 py-3">
+        <div class="grid md:grid-cols-2 gap-6">
+          <div class="space-y-2">
+            ${field("name", "Vevő neve", o.buyer.name)}
+            ${field("address", "Cím", o.buyer.address)}
+            <div class="grid grid-cols-3 gap-2">
+              ${field("postCode", "Irányítószám", o.buyer.postCode)}
+              ${field("city", "Város", o.buyer.city)}
+              ${field("countryCode", "Országkód", o.buyer.countryCode)}
+            </div>
+            ${field("taxNumber", o.buyer.countryCode === "HU" ? "Adószám (12345678-1-12)" : "Adószám", o.buyer.taxNumber)}
+            ${field("replacesInvoice", "Sztornózott számla száma (ha újrakiállítás)", o.replacesInvoice || "")}
+            <p class="text-xs text-gray-400">Teljesítés: ${faireEsc(o.shipmentDate)} · Faire számla: ${faireEsc(o.faireInvoiceNumber || "-")} · Fájl: ${faireEsc(o.fileName || "")}</p>
+          </div>
+          <div>
+            <table class="w-full text-xs">
+              <tbody>
+                ${o.items.map((i) => `<tr><td class="py-0.5 pr-2">${faireEsc(i.name)}<span class="text-gray-400"> ${faireEsc(i.sku)}</span></td><td class="text-right pr-2">${i.quantity} db</td><td class="text-right pr-2">${faireMoney(i.unitPrice)}</td><td class="text-right">${faireMoney(i.quantity * i.unitPrice)}</td></tr>`).join("")}
+                ${o.adjustments.map((a) => `<tr><td colspan="3" class="py-0.5">${faireEsc(a.name)}</td><td class="text-right">${faireMoney(a.unitPrice)}</td></tr>`).join("")}
+                ${o.shipping ? `<tr><td colspan="3" class="py-0.5">Szállítás</td><td class="text-right">${faireMoney(o.shipping)}</td></tr>` : ""}
+                <tr class="border-t border-gray-200 font-medium"><td colspan="3" class="py-1">Nettó összesen</td><td class="text-right">${faireMoney(o.taxableTotal)}</td></tr>
+                <tr><td colspan="3" class="py-0.5 text-gray-500">${faireEsc(o.vatLabel || "ÁFA")}</td><td class="text-right text-gray-500">${faireMoney(o.vatAmount)}</td></tr>
+              </tbody>
+            </table>
+            ${p ? `<p class="text-xs text-gray-500 mt-3">Faire levonások: jutalék ${faireMoney(p.commission)}, next day fee ${faireMoney(p.nextDayFee)} · Kifizetve ${faireMoney(p.payoutAmount)} (${faireEsc(p.payoutDate)})</p>` : ""}
+          </div>
+        </div>
+      </td>`;
+
+    dtr.querySelectorAll("input[data-key]").forEach((inp) => {
+      inp.addEventListener("change", () => {
+        const key = inp.dataset.key;
+        if (key === "replacesInvoice") o.replacesInvoice = inp.value.trim();
+        else o.buyer[key] = key === "countryCode" ? inp.value.trim().toUpperCase() : inp.value.trim();
+        // újraellenőrzés a javított adatokkal
+        o.warnings = o.warnings.filter((w) => !/országot/.test(w) || !o.buyer.countryCode);
+        classifyFaireOrder(o);
+        renderFaire();
+      });
+    });
+    return [tr, dtr];
+  }
+
+  document.getElementById("faire-filter").addEventListener("change", renderFaire);
+  document.getElementById("faire-refresh-btn").addEventListener("click", faireLoadServer);
+  document.getElementById("faire-select-all").addEventListener("change", (e) => {
+    const filter = document.getElementById("faire-filter").value;
+    [...faireOrders.keys()].filter((no) => faireRowState(no) === "ready" && (filter === "all" || filter === "ready"))
+      .forEach((no) => (e.target.checked ? faireSelected.add(no) : faireSelected.delete(no)));
+    renderFaire();
+  });
+
+  document.getElementById("faire-create-btn").addEventListener("click", async (e) => {
+    const list = [...faireSelected].map((no) => faireOrders.get(no)).filter((o) => o && !o.blocks.length);
+    if (!list.length) return;
+    const total = list.reduce((s, o) => s + (o.taxableTotal || 0), 0);
+    if (!confirm(`${list.length} draft számla készül a Faire számlatömbben, összesen ${faireMoney(total)} nettó értékben.\n\nA Billingo semmit nem küld ki és nem véglegesít. Mehet?`)) return;
+
+    const btn = e.target;
+    btn.disabled = true;
+    const results = [];
+    try {
+      for (let i = 0; i < list.length; i += 10) {
+        btn.textContent = `Létrehozás… ${Math.min(i + 10, list.length)} / ${list.length}`;
+        const chunk = list.slice(i, i + 10).map(faireBuildPayload);
+        results.push(...(await callFaire("createDrafts", { orders: chunk })));
+      }
+    } catch (err) {
+      alert(`Hiba: ${err.message}`);
+    }
+    btn.disabled = false;
+    btn.textContent = "Draft számlák létrehozása a Billingóban";
+    faireSelected.clear();
+    await faireLoadServer();
+
+    const okCount = results.filter((r) => r.ok).length;
+    const errors = results.filter((r) => !r.ok);
+    faireSetStatus(`${okCount} draft létrehozva.` + (errors.length ? ` ${errors.length} kihagyva vagy hibás — részletek a felugró ablakban.` : ""));
+    if (errors.length) alert(errors.map((r) => `#${r.orderNumber}: ${r.error}`).join("\n\n"));
   });
 </script>
 
