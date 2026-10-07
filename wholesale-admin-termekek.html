@@ -1119,15 +1119,15 @@
 
         if (o.shippingMethod === "pickup") {
           tr.querySelector(".order-pickup-btn").addEventListener("click", async (e) => {
-            const pickupInfo = prompt("Mikor/hol vehető át a rendelés? (ez a szöveg megy ki emailben)", o.pickupInfo || "");
-            if (!pickupInfo) return;
+            const pickupDate = await askPickupDate(o.pickupDate);
+            if (!pickupDate) return;
             e.target.disabled = true;
             try {
               const idToken = await auth.currentUser.getIdToken();
               const res = await fetch(PICKUP_FUNCTION_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-                body: JSON.stringify({ orderId: docSnap.id, pickupInfo }),
+                body: JSON.stringify({ orderId: docSnap.id, pickupDate }),
               });
               const text = await res.text();
               if (!res.ok) throw new Error(text);
@@ -1165,6 +1165,34 @@
   document.getElementById("order-details-close").addEventListener("click", () => {
     document.getElementById("order-details-modal").classList.add("hidden");
   });
+
+  // Dátumválasztó ablak az átvétel bejelentéséhez (visszaadja: "YYYY-MM-DD" vagy null)
+  function askPickupDate(initial) {
+    return new Promise((resolve) => {
+      const today = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+      const overlay = document.createElement("div");
+      overlay.className = "fixed inset-0 bg-black/40 flex items-center justify-center z-50";
+      overlay.innerHTML = `
+        <div class="bg-white rounded-lg shadow-lg p-5 w-80">
+          <h3 class="text-sm font-semibold mb-1">Átvétel bejelentése</h3>
+          <p class="text-xs text-gray-500 mb-3">Melyik naptól vehető át a rendelés? Az emailben: „[dátum]-tól hétköznapokon 10–17 óra között”.</p>
+          <input type="date" class="pickup-date w-full border rounded px-3 py-2 text-sm mb-4" min="${todayStr}" value="${initial || todayStr}">
+          <div class="flex justify-end gap-2">
+            <button class="pickup-cancel text-sm text-gray-500 px-3 py-1.5">Mégse</button>
+            <button class="pickup-ok bg-gray-900 text-white rounded px-3 py-1.5 text-sm font-medium">Email küldése</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = (val) => { overlay.remove(); resolve(val); };
+      overlay.querySelector(".pickup-cancel").addEventListener("click", () => close(null));
+      overlay.querySelector(".pickup-ok").addEventListener("click", () => {
+        const v = overlay.querySelector(".pickup-date").value;
+        if (v) close(v);
+      });
+    });
+  }
 
   // ============== EMAIL SABLON ==============
 
@@ -1236,12 +1264,17 @@
     {
       key: "pickup",
       title: "3. Átvételi értesítő (személyes átvételnél, ha elkészült a rendelés)",
-      hint: "Jelölő: {{pickupInfo}} — az átvétel helye/ideje, amit a Rendelések fülön adsz meg.",
+      hint: "Jelölő: {{pickupInfo}} — az átvétel kezdő napja és időszaka (pl. „2026. október 8-tól hétköznapokon 10–17 óra között”), a Rendelések fülön megadott dátumból áll elő — a cím viszont ide, a sablonba írandó.",
       subject: "A rendelésed átvehető / Your order is ready for pickup",
       hu: [
         "Szia!",
         "",
         "A rendelésed elkészült, személyesen átvehető: {{pickupInfo}}",
+        "",
+        "Átvétel helye:",
+        "ANDYOURSTORIES",
+        "Szentendrei út 89-95 (PP Center)",
+        "1033 Budapest",
         "",
         "Üdvözlettel,",
         "ANDYOURSTORIES csapata",
@@ -1250,6 +1283,11 @@
         "Hello!",
         "",
         "Your order is ready — you can pick it up: {{pickupInfo}}",
+        "",
+        "Pickup address:",
+        "ANDYOURSTORIES",
+        "Szentendrei út 89-95 (PP Center)",
+        "1033 Budapest, Hungary",
         "",
         "Best regards,",
         "The ANDYOURSTORIES team",
