@@ -32,6 +32,8 @@
       </div>
       <button id="login-btn" class="w-full bg-gray-900 text-white rounded py-2 text-sm font-medium mt-4" data-i18n="loginBtn">Belépés</button>
       <p id="login-error" class="text-red-600 text-xs mt-2 hidden"></p>
+      <p id="login-info" class="text-green-700 text-xs mt-2 hidden"></p>
+      <button id="forgot-password-btn" type="button" class="text-xs text-gray-500 underline mt-3" data-i18n="forgotPassword">Elfelejtett jelszó</button>
       <p class="text-xs text-gray-400 mt-3" data-i18n="noAccountHint">Még nincs fiókod? Válts a "Regisztráció" fülre.</p>
     </div>
 
@@ -121,7 +123,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
-    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
     getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, serverTimestamp
@@ -184,6 +186,10 @@
       orderSuccessBody: "Megkaptuk a rendelésedet, hamarosan jóváhagyjuk és kiküldjük a díjbekérőt.",
       backToCatalog: "Vissza a katalógushoz",
       loginErrorGeneric: "Hibás email vagy jelszó, vagy még nincs jóváhagyott fiókod.",
+      forgotPassword: "Elfelejtett jelszó",
+      forgotEnterEmail: "Írd be fent az email címedet, majd kattints újra az „Elfelejtett jelszó” linkre.",
+      forgotSent: "Ha ez az email cím regisztrálva van, elküldtük a jelszó-visszaállító linket. Nézd meg a spam mappát is.",
+      preorderNote: "Csak előrendelhető — gyártási idő: 1–7 nap",
       transientErrorMsg: "Átmeneti hiba történt, kérjük tölts újra az oldalt.",
       shippingMethodShip: "Szállítás",
       shippingMethodPickup: "Személyes átvétel (ingyenes)",
@@ -230,6 +236,10 @@
       orderSuccessBody: "We've received your order — we'll approve it shortly and send the proforma invoice.",
       backToCatalog: "Back to catalog",
       loginErrorGeneric: "Wrong email or password, or your account hasn't been approved yet.",
+      forgotPassword: "Forgot password",
+      forgotEnterEmail: "Enter your email address above, then click “Forgot password” again.",
+      forgotSent: "If this email address is registered, we have sent a password reset link. Please check your spam folder too.",
+      preorderNote: "Pre-order only — production time: 1–7 days",
       transientErrorMsg: "A temporary error occurred, please refresh the page.",
       shippingMethodShip: "Shipping",
       shippingMethodPickup: "Personal pickup (free)",
@@ -319,6 +329,31 @@
       errorEl.textContent = msg;
       errorEl.classList.remove("hidden");
     }
+  });
+
+  document.getElementById("forgot-password-btn").addEventListener("click", async () => {
+    const email = document.getElementById("login-email").value.trim();
+    const errorEl = document.getElementById("login-error");
+    const infoEl = document.getElementById("login-info");
+    errorEl.classList.add("hidden");
+    infoEl.classList.add("hidden");
+    if (!email) {
+      errorEl.textContent = t("forgotEnterEmail");
+      errorEl.classList.remove("hidden");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (err) {
+      // Szándékosan nem áruljuk el, hogy létezik-e a fiók; csak a valódi hibákat jelezzük.
+      if (err.code !== "auth/user-not-found" && err.code !== "auth/invalid-email") {
+        errorEl.textContent = `${t("errorPrefix")}${err.code || err.message}`;
+        errorEl.classList.remove("hidden");
+        return;
+      }
+    }
+    infoEl.textContent = t("forgotSent");
+    infoEl.classList.remove("hidden");
   });
 
   document.getElementById("dashboard-logout-btn").addEventListener("click", () => signOut(auth));
@@ -435,12 +470,13 @@
     products.forEach((product) => {
       const moq = product.moq || 1;
       const stock = product.stock ?? 0;
-      const soldOut = stock <= 0;
-      const effectiveMin = Math.min(moq, stock); // ha a készlet a MOQ alatt van, a készlet lesz az elérhető minimum/maximum is
+      const preorder = !!product.preorder;
+      const soldOut = !preorder && stock <= 0;
+      const effectiveMin = preorder ? moq : Math.min(moq, stock); // ha a készlet a MOQ alatt van, a készlet lesz az elérhető minimum/maximum is
       const qty = cart[product.sku] || 0;
       const unitPrice = getUnitPrice(product, qty || effectiveMin);
-      const atMax = qty >= stock;
-      const stockLimited = stock > 0 && stock < moq;
+      const atMax = !preorder && qty >= stock;
+      const stockLimited = !preorder && stock > 0 && stock < moq;
 
       const row = document.createElement("div");
       row.className = "flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3";
@@ -460,6 +496,7 @@
           <div class="font-medium truncate">${product.title || product.sku}</div>
           <div class="text-gray-400 text-xs">SKU: ${product.sku} · ${moqLine}</div>
           <div class="text-xs mt-0.5">${priceLine}</div>
+          ${preorder ? `<div class="text-xs mt-1 inline-block bg-amber-50 text-amber-700 border border-amber-200 rounded px-2 py-0.5">${t("preorderNote")}</div>` : ""}
         </div>
         <div class="shrink-0">
           ${soldOut
@@ -477,7 +514,7 @@
       if (!soldOut) {
         row.querySelector(".qty-plus").addEventListener("click", () => {
           const current = cart[product.sku] || 0;
-          const next = current === 0 ? effectiveMin : Math.min(current + 1, stock);
+          const next = current === 0 ? effectiveMin : (preorder ? current + 1 : Math.min(current + 1, stock));
           cart[product.sku] = next;
           rerenderFilteredCatalog();
           updateCartBar();
@@ -578,7 +615,7 @@
       const product = allProducts.find(p => p.sku === sku);
       const qty = cart[sku];
       const unitPrice = getUnitPrice(product, qty) || 0;
-      return { sku, title: product.title, qty, unitPrice, lineTotal: unitPrice * qty };
+      return { sku, title: product.title, qty, unitPrice, lineTotal: unitPrice * qty, ...(product.preorder ? { preorder: true } : {}) };
     });
 
     if (!items.length) return;

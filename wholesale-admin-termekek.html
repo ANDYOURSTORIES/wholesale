@@ -61,6 +61,8 @@
       <span id="bulk-count">0 kijelölve</span>
       <button id="bulk-show-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Láthatóvá tétel</button>
       <button id="bulk-hide-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Elrejtés</button>
+      <button id="bulk-preorder-on-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Csak előrendelés: be</button>
+      <button id="bulk-preorder-off-btn" class="bg-white/10 hover:bg-white/20 rounded px-3 py-1">Csak előrendelés: ki</button>
       <span class="border-l border-white/20 pl-3 flex items-center gap-2">
         MOQ:
         <input id="bulk-moq-input" type="number" min="1" class="w-16 rounded px-2 py-1 text-gray-900 text-sm">
@@ -83,6 +85,7 @@
             </th>
             <th class="px-3 py-2 font-medium"></th>
             <th class="px-3 py-2 font-medium">Látható</th>
+            <th class="px-3 py-2 font-medium" title="Készlettől függetlenül rendelhető, a retailer látja: csak előrendelhető, gyártási idő 1–7 nap">Csak előrendelés</th>
             <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="sku">SKU <span class="sort-arrow"></span></th>
             <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="title">Termék <span class="sort-arrow"></span></th>
             <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="productType">Típus <span class="sort-arrow"></span></th>
@@ -471,6 +474,9 @@
       <td class="px-3 py-2">
         <input type="checkbox" class="visible-toggle w-4 h-4" ${data.visible ? "checked" : ""}>
       </td>
+      <td class="px-3 py-2">
+        <input type="checkbox" class="preorder-toggle w-4 h-4" ${data.preorder ? "checked" : ""}>
+      </td>
       <td class="px-3 py-2 font-mono text-xs">${sku}</td>
       <td class="px-3 py-2">${data.title || ""}</td>
       <td class="px-3 py-2">
@@ -492,6 +498,10 @@
 
     tr.querySelector(".visible-toggle").addEventListener("change", (e) => {
       updateDoc(docRef, { visible: e.target.checked });
+    });
+
+    tr.querySelector(".preorder-toggle").addEventListener("change", (e) => {
+      updateDoc(docRef, { preorder: e.target.checked });
     });
 
     tr.querySelector(".moq-input").addEventListener("change", (e) => {
@@ -532,6 +542,14 @@
 
   document.getElementById("bulk-show-btn").addEventListener("click", () => bulkSetVisible(true));
   document.getElementById("bulk-hide-btn").addEventListener("click", () => bulkSetVisible(false));
+  document.getElementById("bulk-preorder-on-btn").addEventListener("click", () => bulkSetPreorder(true));
+  document.getElementById("bulk-preorder-off-btn").addEventListener("click", () => bulkSetPreorder(false));
+
+  async function bulkSetPreorder(preorder) {
+    const batch = writeBatch(db);
+    selectedSkus.forEach(sku => batch.update(doc(db, "wholesaleProducts", sku), { preorder }));
+    await batch.commit();
+  }
 
   async function bulkSetVisible(visible) {
     const batch = writeBatch(db);
@@ -935,7 +953,7 @@
   function orderItemsHtml(items) {
     return (items || []).map(i =>
       `<div class="flex justify-between text-xs text-gray-600">
-        <span>${i.title || i.sku} <span class="text-gray-400">(${i.sku})</span> × ${i.qty}</span>
+        <span>${i.title || i.sku} <span class="text-gray-400">(${i.sku})</span> × ${i.qty}${i.preorder ? ' <span class="text-amber-600">(előrendelés)</span>' : ""}</span>
         <span>${i.lineTotal?.toLocaleString("hu-HU")}</span>
       </div>`
     ).join("");
